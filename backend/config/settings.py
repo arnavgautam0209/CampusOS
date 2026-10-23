@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "skillpass",
     "attendance",
     "devices",
+    "planner",
 ]
 
 MIDDLEWARE = [
@@ -114,9 +115,14 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_THROTTLE_RATES": {"planner": os.environ.get("CAMPUSOS_PLANNER_RATE", "30/hour")},
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
 }
+
+# AI planner: "auto" tries Claude (needs ANTHROPIC_API_KEY) and falls back to keyword
+# matching; "keywords" never calls Claude.
+PLANNER_ENGINE = os.environ.get("CAMPUSOS_PLANNER_ENGINE", "auto")
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True

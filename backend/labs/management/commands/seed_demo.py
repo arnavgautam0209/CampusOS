@@ -11,7 +11,7 @@ from attendance.models import Classroom
 from devices.models import Device
 from skillpass.models import Certification
 
-# Mirrors DemoLabs.all in ios/CampusOS/Core/Models/Lab.swift.
+# Started from DemoLabs.all in ios/CampusOS/Core/Models/Lab.swift (the app now loads labs from the API).
 DEMO_LABS = [
     {
         "id": "LAB001", "name": "Robotics Lab", "location": "Block A · 204",
@@ -20,6 +20,8 @@ DEMO_LABS = [
             ("EQ001", "ESP32 Kits", "Embedded", True),
             ("EQ002", "Robotic Arm", "Robotics", True),
             ("EQ003", "Soldering Station", "Tools", True),
+            ("EQ008", "Arduino Uno Boards", "Embedded", True),
+            ("EQ009", "DC Gear Motors", "Components", True),
         ],
     },
     {

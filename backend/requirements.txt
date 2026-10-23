@@ -2,3 +2,4 @@
 # On Python 3.10+ pip will pick Django 5.2 LTS, which this code also supports.
 Django>=4.2,<6.0
 djangorestframework>=3.15,<3.17
+anthropic>=0.125,<2.0

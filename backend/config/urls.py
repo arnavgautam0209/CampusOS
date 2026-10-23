@@ -19,6 +19,7 @@ api_v1 = [
     path("", include("skillpass.urls")),
     path("", include("devices.urls")),
     path("", include("attendance.urls")),
+    path("", include("planner.urls")),
 ]
 
 urlpatterns = [
