@@ -44,6 +44,12 @@ struct PreviewAttendanceService: AttendanceService {
     }
 }
 
+struct PreviewPlannerService: PlannerService {
+    func plan(prompt: String) async throws -> ProjectPlan {
+        throw APIError.notFound("Not available in previews.")
+    }
+}
+
 extension View {
     @MainActor
     func previewEnvironment() -> some View {
@@ -53,6 +59,7 @@ extension View {
             .environmentObject(BookingStore(service: PreviewBookingService()))
             .environmentObject(SkillPassStore(service: PreviewSkillPassService()))
             .environmentObject(AttendanceStore(service: PreviewAttendanceService()))
+            .environmentObject(PlannerStore(service: PreviewPlannerService()))
     }
 }
 #endif

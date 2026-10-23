@@ -27,19 +27,23 @@ final class APIClient {
         try await send(path, method: "GET", body: nil, authenticated: authenticated)
     }
 
-    func post<T: Decodable>(_ path: String, body: some Encodable, authenticated: Bool) async throws -> T {
+    /// `timeout` is longer for slow endpoints such as the AI planner.
+    func post<T: Decodable>(_ path: String, body: some Encodable, authenticated: Bool,
+                            timeout: TimeInterval = APIClient.defaultTimeout) async throws -> T {
         try await send(path, method: "POST", body: try JSONEncoder.campusOS.encode(body),
-                       authenticated: authenticated)
+                       authenticated: authenticated, timeout: timeout)
     }
 
     func post<T: Decodable>(_ path: String, authenticated: Bool) async throws -> T {
         try await send(path, method: "POST", body: nil, authenticated: authenticated)
     }
 
-    private func send<T: Decodable>(_ path: String, method: String, body: Data?,
-                                    authenticated: Bool) async throws -> T {
+    static let defaultTimeout: TimeInterval = 15
+
+    private func send<T: Decodable>(_ path: String, method: String, body: Data?, authenticated: Bool,
+                                    timeout: TimeInterval = APIClient.defaultTimeout) async throws -> T {
         guard let url = URL(string: path, relativeTo: baseURL()) else { throw APIError.badResponse }
-        var request = URLRequest(url: url, timeoutInterval: 15)
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {

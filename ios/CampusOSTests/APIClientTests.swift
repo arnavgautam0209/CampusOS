@@ -159,6 +159,26 @@ struct NetworkTests {
         }
     }
 
+    @Test func plannerRequestUsesLongTimeout() async throws {
+        StubURLProtocol.reset(.init(json: plannerFixtureJSON))
+        let service = APIPlannerService(api: makeClient(token: "abc"))
+
+        let plan = try await service.plan(prompt: "robot")
+
+        let request = try #require(StubURLProtocol.requests.first)
+        #expect(request.url?.absoluteString == "http://campus.test/api/v1/ai/planner/")
+        #expect(request.timeoutInterval == 60)
+        let body = try #require(JSONSerialization.jsonObject(with: StubURLProtocol.bodies[0]) as? [String: Any])
+        #expect(body["prompt"] as? String == "robot")
+        #expect(plan.recommendations.first?.lab.id == "LAB001")
+    }
+
+    @Test func ordinaryRequestsKeepShortTimeout() async throws {
+        StubURLProtocol.reset(.init(json: "[]"))
+        let _: [Lab] = try await makeClient().get("labs/", authenticated: false)
+        #expect(StubURLProtocol.requests.first?.timeoutInterval == 15)
+    }
+
     @Test func missingCertificationShowsSkillPassMessage() async {
         StubURLProtocol.reset(.init(status: 403, json: """
         {"detail":"This lab requires certification: Basic Electronics Safety. Ask faculty to approve your training in SkillPass.",
