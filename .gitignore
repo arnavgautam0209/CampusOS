@@ -7,3 +7,6 @@ xcuserdata/
 .env.*
 !.env.example
 __pycache__/
+.venv/
+*.sqlite3
+staticfiles/
