@@ -32,16 +32,17 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - Sign-in with Django token auth; token stored in the Keychain; editable server address
 - LabOS (**live backend data**): lab catalogue and equipment from `/api/v1/labs/`; reservations (30 min / 1 h / 2 h) and cancellation through `/api/v1/bookings/`, with loading, error and retry states. Conflicts are checked by the server across all users
 - SkillPass (**live backend data**): your certifications with status and expiry, available training with a **Request Training** / **Request Renewal** button; lab details list required certifications with your standing, and equipment shows its own requirements
-- AssetX and SafeLab still show **sample data** (labelled as such); SpacePulse and ProxyGuard are placeholders
+- ProxyGuard (**live backend data**): faculty see open sessions, who's present, a live feed of reader taps (new taps highlighted) and reader status. Students see their own attendance. Both refresh every 3 s while open
+- AssetX and SafeLab still show **sample data** (labelled as such); SpacePulse is a placeholder
 - AI Planner captures an idea; no AI model is connected
-- Unit tests for `BookingStore`, `SkillPassStore`, `APIClient`, sign-in, server address parsing, date parsing and Keychain storage
+- Unit tests for `BookingStore`, `SkillPassStore`, `AttendanceStore`, `APIClient`, sign-in, server address parsing, date parsing and Keychain storage
 
 **Backend**
 - `/api/v1/` health, token auth + `/auth/me/`, labs (read-only), bookings (create/list/cancel) with server-side conflict checks and tests
 - SkillPass: certifications with faculty approval, expiry and revocation; restricted labs refuse bookings (403) without the required certification
 - Attendance: ESP32 readers POST card taps to `/api/v1/devices/scan/` with a device key. Attendance is marked only while faculty have a session open in that room, with duplicate protection and a log of every scan
 
-**Not yet built:** real roles, an in-app faculty approval screen (use Django admin), showing attendance and scans in the iOS app, sensor telemetry, the full ProxyGuard verification flow, AI planning.
+**Not yet built:** real roles, an in-app faculty approval screen (use Django admin), opening/closing sessions from the app (use Django admin), sensor telemetry, the full ProxyGuard verification flow, AI planning.
 
 ## Ground rules
 - The backend is the source of truth. Anything shown from local demo data is labelled as demo data.

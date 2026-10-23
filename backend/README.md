@@ -40,6 +40,8 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | GET | `/api/v1/bookings/{id}/` | token | One of your bookings |
 | POST | `/api/v1/bookings/{id}/cancel/` | token | Cancel an active, unfinished booking |
 | POST | `/api/v1/devices/scan/` | device key | Card tap from a reader. See [firmware/README.md](../firmware/README.md) for the full contract |
+| GET | `/api/v1/attendance/live/` | staff | Open sessions with who's present, readers, and the latest 25 scans (polled by the app) |
+| GET | `/api/v1/attendance/mine/` | token | Your attendance records, newest first |
 | GET | `/api/v1/certifications/` | public | SkillPass catalogue |
 | GET | `/api/v1/certifications/mine/` | token | Your certification records (`status`, `isValid`, `expiresAt`) |
 | POST | `/api/v1/certifications/{id}/request/` | token | Ask faculty to certify you (creates a pending record) |

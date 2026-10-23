@@ -64,7 +64,8 @@ On the Mac running Django (`backend/`):
      **Devices → Scan events** shows it too.
    - **Attendance → Attendance sessions → Add**: open a session for `ROOM-101`. Close it afterwards with
      the *Close selected sessions* action.
-5. Tap cards and watch **Attendance sessions** (records per session) and **Scan events** (every tap).
+5. Tap cards and watch them arrive in the iOS app: **Home → ProxyGuard** signed in as a staff user shows the live
+   dashboard; a student sees their own attendance. They also appear in admin under **Attendance sessions** and **Scan events**.
 
 The ESP32 and the Mac must be on the same network. Many event Wi-Fi networks block device-to-device traffic;
 if scans never arrive, put both on a phone hotspot.
