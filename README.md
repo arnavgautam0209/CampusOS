@@ -3,7 +3,8 @@
 *Your Campus. Connected.* A native iOS / SwiftUI smart-campus app with a Django backend.
 
 ## Repository layout
-- `ios/` – Xcode project; app source in `ios/CampusOS/` (`Core/` + `Features/`), unit tests in `ios/CampusOSTests/`
+- `ios/` – Xcode project; app source in `ios/CampusOS/` (`Core/` + `Features/`), unit tests in `ios/CampusOSTests/`, screenshot walkthrough in `ios/CampusOSUITests/`
+- `scripts/` – `walkthrough.sh` (see below)
 - `backend/` – Django REST API (see [backend/README.md](backend/README.md))
 - `firmware/` – ESP32 card-reader notes and the scan API contract ([firmware/README.md](firmware/README.md))
 
@@ -18,6 +19,16 @@ xcodebuild test -project ios/CampusOS.xcodeproj -scheme CampusOS -destination 'p
 ```
 
 **LabOS needs the backend running** (next section). Start it, then in the app sign in from the Profile tab (or when you first reserve) with a backend account, e.g. the `demo_student` created by `seed_demo --demo-user`.
+
+## Screenshot walkthrough
+`scripts/walkthrough.sh` taps through the real app in the iOS Simulator against the local backend and saves a screenshot of every main screen (plus a screen recording when Xcode provides one) to `walkthrough-output/` (gitignored). It:
+
+1. seeds demo users and data with a one-time password: `demo_ui_*` users, a separate `DEMO-ROOM` with its own `READER-DEMO` reader, demo card UIDs and a booking made through the normal booking rules
+2. starts the backend on `127.0.0.1:8000` unless one is already running
+3. runs the `WalkthroughUITests` UI test (sign-in, LabOS, SkillPass, Bookings, AI Planner, ProxyGuard as student and faculty)
+4. removes the demo data again, even if the run fails
+
+Real rooms, readers, device keys and cards are never touched. Needs the backend virtualenv (next section) and Xcode. Pick a simulator with `SIMULATOR="iPhone 17 Pro" scripts/walkthrough.sh`. The UI test skips itself in normal ⌘U runs.
 
 ## Run the backend
 ```bash

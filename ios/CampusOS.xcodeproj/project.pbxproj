@@ -14,6 +14,7 @@
     TargetAttributes = {
      A10000000000000000000002 = { CreatedOnToolsVersion = 16.0; };
      A10000000000000000000012 = { CreatedOnToolsVersion = 16.0; TestTargetID = A10000000000000000000002; };
+     A10000000000000000000022 = { CreatedOnToolsVersion = 16.0; TestTargetID = A10000000000000000000002; };
     };
    };
    buildConfigurationList = A10000000000000000000007;
@@ -27,7 +28,7 @@
    productRefGroup = A10000000000000000000004;
    projectDirPath = "";
    projectRoot = "";
-   targets = (A10000000000000000000002, A10000000000000000000012);
+   targets = (A10000000000000000000002, A10000000000000000000012, A10000000000000000000022);
   };
   A10000000000000000000002 = {
    isa = PBXNativeTarget;
@@ -48,12 +49,12 @@
   };
   A10000000000000000000003 = {
    isa = PBXGroup;
-   children = (A10000000000000000000005, A10000000000000000000010, A10000000000000000000004);
+   children = (A10000000000000000000005, A10000000000000000000010, A10000000000000000000020, A10000000000000000000004);
    sourceTree = "<group>";
   };
   A10000000000000000000004 = {
    isa = PBXGroup;
-   children = (A10000000000000000000006, A10000000000000000000011);
+   children = (A10000000000000000000006, A10000000000000000000011, A10000000000000000000021);
    name = Products;
    sourceTree = "<group>";
   };
@@ -257,6 +258,59 @@
    remoteGlobalIDString = A10000000000000000000002;
    remoteInfo = CampusOS;
   };
+  A10000000000000000000020 = { isa = PBXFileSystemSynchronizedRootGroup; path = CampusOSUITests; sourceTree = "<group>"; };
+  A10000000000000000000021 = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CampusOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+  A10000000000000000000022 = {
+   isa = PBXNativeTarget;
+   buildConfigurationList = A10000000000000000000027;
+   buildPhases = (A10000000000000000000023, A10000000000000000000024, A10000000000000000000025);
+   buildRules = ();
+   dependencies = (A10000000000000000000026);
+   fileSystemSynchronizedGroups = (A10000000000000000000020);
+   name = CampusOSUITests;
+   packageProductDependencies = ();
+   productName = CampusOSUITests;
+   productReference = A10000000000000000000021;
+   productType = "com.apple.product-type.bundle.ui-testing";
+  };
+  A10000000000000000000023 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  A10000000000000000000024 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  A10000000000000000000025 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  A10000000000000000000026 = { isa = PBXTargetDependency; target = A10000000000000000000002; targetProxy = A1000000000000000000002A; };
+  A10000000000000000000027 = { isa = XCConfigurationList; buildConfigurations = (A10000000000000000000028, A10000000000000000000029); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+  A10000000000000000000028 = {
+   isa = XCBuildConfiguration;
+   buildSettings = {
+    CODE_SIGN_STYLE = Automatic;
+    GENERATE_INFOPLIST_FILE = YES;
+    IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+    PRODUCT_BUNDLE_IDENTIFIER = com.campusos.appUITests;
+    PRODUCT_NAME = "$(TARGET_NAME)";
+    SDKROOT = iphoneos;
+    SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+    SWIFT_VERSION = 5.0;
+    TARGETED_DEVICE_FAMILY = "1,2";
+    TEST_TARGET_NAME = CampusOS;
+   };
+   name = Debug;
+  };
+  A10000000000000000000029 = {
+   isa = XCBuildConfiguration;
+   buildSettings = {
+    CODE_SIGN_STYLE = Automatic;
+    GENERATE_INFOPLIST_FILE = YES;
+    IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+    PRODUCT_BUNDLE_IDENTIFIER = com.campusos.appUITests;
+    PRODUCT_NAME = "$(TARGET_NAME)";
+    SDKROOT = iphoneos;
+    SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+    SWIFT_VERSION = 5.0;
+    TARGETED_DEVICE_FAMILY = "1,2";
+    TEST_TARGET_NAME = CampusOS;
+   };
+   name = Release;
+  };
+  A1000000000000000000002A = { isa = PBXContainerItemProxy; containerPortal = A10000000000000000000001; proxyType = 1; remoteGlobalIDString = A10000000000000000000002; remoteInfo = CampusOS; };
  };
  rootObject = A10000000000000000000001;
 }
