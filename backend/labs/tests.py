@@ -9,6 +9,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from attendance.models import AttendanceRecord, CampusCard, Classroom
+from bookings.models import Booking
 from devices.models import Device
 
 from .models import Lab
@@ -66,11 +67,15 @@ class WalkthroughSeedTests(TestCase):
         self.assertEqual(get_user_model().objects.filter(username__startswith="demo_ui_").count(), 4)
         self.assertEqual(AttendanceRecord.objects.filter(session__classroom_id="DEMO-ROOM").count(), 3)
         self.assertTrue(Device.objects.get(pk="READER-DEMO").key_hash)
+        checked_in = Booking.objects.get(user__username="demo_ui_student", lab_id="LAB001")
+        self.assertIsNotNone(checked_in.checked_in_at)
+        self.assertEqual(checked_in.checked_in_device_id, "READER-DEMO-LAB")
 
         call_command("seed_walkthrough", "--clean", stdout=StringIO())
         self.assertFalse(get_user_model().objects.filter(username__startswith="demo_ui_").exists())
         self.assertFalse(Classroom.objects.filter(pk="DEMO-ROOM").exists())
-        self.assertFalse(Device.objects.filter(pk="READER-DEMO").exists())
+        self.assertFalse(Device.objects.filter(pk__in=["READER-DEMO", "READER-DEMO-LAB"]).exists())
+        self.assertTrue(Device.objects.filter(pk="READER-LAB001").exists())  # real readers kept
         self.assertTrue(Lab.objects.exists())  # real catalogue kept
 
     def test_refuses_to_take_over_a_real_card(self):

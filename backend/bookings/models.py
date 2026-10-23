@@ -20,6 +20,10 @@ class Booking(models.Model):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
     created_at = models.DateTimeField(auto_now_add=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    # Set when the student taps their card on the lab's door reader (actual session start).
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+    checked_in_device = models.ForeignKey("devices.Device", null=True, blank=True, on_delete=models.SET_NULL,
+                                          related_name="+")
 
     class Meta:
         ordering = ["start"]

@@ -39,7 +39,7 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/bookings/` | token | `{labID, start (ISO 8601), durationMinutes}` |
 | GET | `/api/v1/bookings/{id}/` | token | One of your bookings |
 | POST | `/api/v1/bookings/{id}/cancel/` | token | Cancel an active, unfinished booking |
-| POST | `/api/v1/devices/scan/` | device key | Card tap from a reader. See [firmware/README.md](../firmware/README.md) for the full contract |
+| POST | `/api/v1/devices/scan/` | device key | Card tap from a reader: classroom attendance (`classroomId`) or lab check-in (`labId`). See [firmware/README.md](../firmware/README.md) for the full contract |
 | GET | `/api/v1/attendance/live/` | staff | Open sessions with who's present, readers, and the latest 25 scans (polled by the app) |
 | GET | `/api/v1/attendance/mine/` | token | Your attendance records, newest first |
 | POST | `/api/v1/attendance/sessions/` | staff | `{classroomId, title}` opens a session (409 if the room already has one) |
@@ -75,6 +75,11 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - Card UIDs are registered to students in admin → Campus cards. Every tap, including unknown cards, is logged in admin → Scan events.
 - Faculty can add attendance by hand in a session's admin page; those rows are marked `manual`.
 - Limitation: a UID isn't identity proof, and enrolment isn't checked yet. See firmware/README.md.
+
+## Lab check-in
+- A reader belongs to a classroom **or** a lab (database constraint). Lab door readers send `labId`.
+- `bookings/services.py` `check_in()` grants access only with the student's own active booking for that lab (from 10 minutes before the start until the end), the lab open, and every required SkillPass certification valid until the booking ends. Otherwise it denies with a reason (`no_booking`, `too_early`, `certification_required`, `lab_closed`).
+- The first granted tap stores `checked_in_at` and the reader on the booking (actual usage start); bookings show it as `checkedInAt`, and a checked-in booking can't be cancelled. Every tap, granted or not, is in the scan log with its reason.
 
 ## AI Mission Planner
 - **Claude only interprets the student's text** (`planner/extraction.py`): it extracts team size, date, time, duration and items. Items can only be matched to real equipment IDs (a JSON schema with an `enum` of catalogue IDs), and the server re-validates everything it returns.

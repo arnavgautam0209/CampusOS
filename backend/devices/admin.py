@@ -5,8 +5,8 @@ from .models import Device, ScanEvent
 
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
-    list_display = ["id", "name", "classroom", "is_active", "key_prefix", "key_issued_at", "last_seen_at"]
-    list_filter = ["is_active", "classroom"]
+    list_display = ["id", "name", "classroom", "lab", "is_active", "key_prefix", "key_issued_at", "last_seen_at"]
+    list_filter = ["is_active", "classroom", "lab"]
     readonly_fields = ["key_prefix", "key_issued_at", "last_seen_at"]
     actions = ["issue_new_key"]
 
@@ -21,7 +21,7 @@ class DeviceAdmin(admin.ModelAdmin):
 
 @admin.register(ScanEvent)
 class ScanEventAdmin(admin.ModelAdmin):
-    list_display = ["created_at", "device", "uid", "result", "student", "session"]
+    list_display = ["created_at", "device", "uid", "result", "reason", "student", "session", "booking"]
     list_filter = ["result", "device"]
     search_fields = ["uid", "student__username"]
 

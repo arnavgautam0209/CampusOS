@@ -2,8 +2,8 @@
 Demo data for the screenshot walkthrough (scripts/walkthrough.sh).
 
 Everything it creates is separate from real data: users start with "demo_ui_",
-attendance happens in its own DEMO-ROOM with its own reader, and card UIDs use
-reserved demo values. Real rooms, readers, keys and cards are never touched.
+attendance happens in its own DEMO-ROOM with its own reader, the lab check-in
+uses its own demo door reader, and card UIDs use reserved demo values. Real rooms, readers, keys and cards are never touched.
 `--clean` removes exactly what this command creates.
 """
 
@@ -26,6 +26,8 @@ from skillpass.models import UserCertification
 PREFIX = "demo_ui_"
 ROOM_ID, ROOM_NAME = "DEMO-ROOM", "Demo Lecture Room"
 READER_ID = "READER-DEMO"
+LAB_READER_ID = "READER-DEMO-LAB"
+CHECK_IN_LAB = "LAB001"
 SESSION_TITLE = "CS201 Embedded Systems · Lecture 5"
 # (username, first, last, staff, card UID)
 PEOPLE = [
@@ -95,13 +97,24 @@ class Command(BaseCommand):
             response = client.post("/api/v1/devices/scan/", {"uid": uid, "classroomId": ROOM_ID}, format="json")
             if response.status_code >= 500:
                 raise CommandError(f"Demo tap {uid} failed: {response.status_code}")
+
+        # Lab check-in: a booking starting in a few minutes, tapped at a demo door reader.
+        door = Device.objects.create(id=LAB_READER_ID, name="Demo lab door reader", lab_id=CHECK_IN_LAB)
+        start = (timezone.now() + timedelta(minutes=5)).replace(second=0, microsecond=0)
+        try:
+            create_booking(student, CHECK_IN_LAB, start, 60)
+        except APIException:
+            self.stdout.write("Robotics Lab is booked right now, so the demo skips the check-in.")
+        else:
+            client.credentials(HTTP_AUTHORIZATION=f"Device {door.issue_key()}")
+            client.post("/api/v1/devices/scan/", {"uid": "D1D1D1D1", "labId": CHECK_IN_LAB}, format="json")
         self.stdout.write(self.style.SUCCESS(
             f"Walkthrough demo data ready: {len(PEOPLE)} demo users, {ROOM_NAME}, {len(TAPS)} reader taps."))
 
     @transaction.atomic
     def clean(self, quiet=False):
         AttendanceSession.objects.filter(classroom_id=ROOM_ID).delete()
-        Device.objects.filter(pk=READER_ID).delete()  # also deletes its scan log
+        Device.objects.filter(pk__in=[READER_ID, LAB_READER_ID]).delete()  # also deletes their scan logs
         Classroom.objects.filter(pk=ROOM_ID).delete()
         deleted, _ = get_user_model().objects.filter(username__startswith=PREFIX).delete()
         if not quiet:

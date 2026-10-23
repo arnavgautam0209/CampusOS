@@ -1,3 +1,4 @@
+from datetime import timedelta
 from io import StringIO
 
 from django.contrib.auth import get_user_model
@@ -9,6 +10,9 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from attendance.models import AttendanceRecord, AttendanceSession, CampusCard, Classroom
+from bookings.models import Booking
+from labs.models import Lab
+from skillpass.models import UserCertification
 
 from .models import Device, ScanEvent
 
@@ -245,3 +249,142 @@ class AuditAndIntegrityTests(ScanTestCase):
         device = Device.objects.get(pk="READER-ROOM-101")
         self.assertEqual(device.classroom_id, "ROOM-101")
         self.assertEqual(device.key_hash, "")
+
+
+class LabCheckInTests(TestCase):
+    """Lab door readers: {"uid", "labId"} checks a student in to their booking."""
+
+    def setUp(self):
+        call_command("seed_demo", verbosity=0)
+        User = get_user_model()
+        self.student = User.objects.create_user("alice", first_name="Alice", last_name="Rao",
+                                                password="unused-test-pw")
+        self.faculty = User.objects.create_user("prof", password="unused-test-pw", is_staff=True)
+        CampusCard.objects.create(uid=UID, user=self.student)
+        self.device = Device.objects.get(pk="READER-LAB001")
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Device {self.device.issue_key()}")
+        self.now = timezone.now()
+
+    def book(self, lab="LAB001", starts_in=-5, minutes=60, user=None):
+        start = self.now + timedelta(minutes=starts_in)
+        return Booking.objects.create(user=user or self.student, lab_id=lab, start=start,
+                                      end=start + timedelta(minutes=minutes))
+
+    def tap(self, lab="LAB001", uid=UID, client=None):
+        return (client or self.client).post(URL, {"uid": uid, "labId": lab}, format="json")
+
+    def test_granted_records_actual_start(self):
+        booking = self.book()
+        response = self.tap()
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["result"], "granted")
+        self.assertEqual(body["student"], "Alice Rao")
+        self.assertTrue(body["message"].startswith("Alice Rao: Access granted until"))
+        self.assertEqual(body["bookingId"], str(booking.id))
+        booking.refresh_from_db()
+        self.assertIsNotNone(booking.checked_in_at)
+        self.assertEqual(booking.checked_in_device, self.device)
+        event = ScanEvent.objects.get()
+        self.assertEqual((event.result, event.booking, event.classroom_id_sent), ("granted", booking, "LAB001"))
+
+    def test_repeat_tap_keeps_first_check_in(self):
+        booking = self.book()
+        first = self.tap().json()["checkedInAt"]
+        response = self.tap()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["result"], "already_checked_in")
+        self.assertEqual(response.json()["checkedInAt"], first)
+
+    def test_check_in_opens_ten_minutes_early(self):
+        self.book(starts_in=8)
+        self.assertEqual(self.tap().json()["result"], "granted")
+
+    def test_too_early_is_denied_with_opening_time(self):
+        booking = self.book(starts_in=60)
+        response = self.tap()
+        self.assertEqual(response.status_code, 403)
+        body = response.json()
+        self.assertEqual((body["result"], body["reason"]), ("denied", "too_early"))
+        opens = timezone.localtime(booking.start - timedelta(minutes=10))
+        self.assertIn(f"{opens:%H:%M}", body["message"])
+        booking.refresh_from_db()
+        self.assertIsNone(booking.checked_in_at)
+
+    def test_no_booking_is_denied(self):
+        response = self.tap()
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["reason"], "no_booking")
+
+    def test_bookings_that_dont_count(self):
+        other = get_user_model().objects.create_user("bob", password="unused-test-pw")
+        self.book(user=other)                                   # someone else's
+        self.book(lab="LAB004")                                 # another lab
+        self.book(starts_in=-120, minutes=60)                   # already ended
+        cancelled = self.book()
+        cancelled.status = "cancelled"
+        cancelled.save()
+        self.assertEqual(self.tap().json()["reason"], "no_booking")
+
+    def test_restricted_lab_needs_certification_through_the_session(self):
+        reader = Device.objects.create(id="READER-LAB002", name="Electronics door", lab_id="LAB002")
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Device {reader.issue_key()}")
+        booking = self.book(lab="LAB002")
+
+        response = self.tap(lab="LAB002", client=client)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["reason"], "certification_required")
+        self.assertEqual(response.json()["missingCertifications"], ["CERT-ELEC-BASIC"])
+
+        record = UserCertification.objects.create(user=self.student, certification_id="CERT-ELEC-BASIC",
+                                                  status="approved", approved_by=self.faculty,
+                                                  expires_at=booking.end - timedelta(minutes=1))
+        self.assertEqual(self.tap(lab="LAB002", client=client).json()["reason"], "certification_required")
+        record.expires_at = None
+        record.save()
+        self.assertEqual(self.tap(lab="LAB002", client=client).json()["result"], "granted")
+
+    def test_closed_lab_is_denied(self):
+        Lab.objects.filter(pk="LAB001").update(is_open_for_booking=False)
+        self.book()
+        self.assertEqual(self.tap().json()["reason"], "lab_closed")
+
+    def test_unknown_card(self):
+        response = self.tap(uid="DEADBEEF")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["result"], "unknown_card")
+
+    def test_wrong_or_missing_lab_id(self):
+        self.book()
+        wrong = self.tap(lab="LAB004")
+        self.assertEqual(wrong.status_code, 400)
+        self.assertIn("LAB001", wrong.json()["message"])
+        missing = self.client.post(URL, {"uid": UID, "classroomId": "ROOM-101"}, format="json")
+        self.assertEqual(missing.status_code, 400)
+        self.assertIn("labId", missing.json()["message"])
+
+    def test_reader_without_location(self):
+        reader = Device.objects.create(id="READER-SPARE", name="Spare")
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Device {reader.issue_key()}")
+        response = client.post(URL, {"uid": UID, "classroomId": "ROOM-101"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("isn't assigned", response.json()["message"])
+
+    def test_reader_cannot_be_in_classroom_and_lab(self):
+        with self.assertRaises(IntegrityError):
+            Device.objects.create(id="READER-BOTH", name="Both", classroom_id="ROOM-101", lab_id="LAB001")
+
+    def test_checked_in_booking_shows_in_api_and_cannot_be_cancelled(self):
+        booking = self.book()
+        self.tap()
+        app = APIClient()
+        app.force_authenticate(self.student)
+        listed = app.get("/api/v1/bookings/").json()[0]
+        self.assertIsNotNone(listed["checkedInAt"])
+        response = app.post(f"/api/v1/bookings/{booking.id}/cancel/")
+        self.assertEqual(response.status_code, 400)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, "active")

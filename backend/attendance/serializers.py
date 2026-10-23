@@ -56,7 +56,7 @@ class ScanSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ScanEvent
-        fields = ["id", "deviceId", "uid", "result", "student", "classroomId", "createdAt"]
+        fields = ["id", "deviceId", "uid", "result", "reason", "student", "classroomId", "createdAt"]
 
     def get_student(self, scan):
         return display_name(scan.student) if scan.student else None
@@ -64,13 +64,14 @@ class ScanSerializer(serializers.ModelSerializer):
 
 class ReaderSerializer(serializers.ModelSerializer):
     classroomId = serializers.CharField(source="classroom_id", read_only=True, allow_null=True)
+    labId = serializers.CharField(source="lab_id", read_only=True, allow_null=True)
     isActive = serializers.BooleanField(source="is_active", read_only=True)
     hasKey = serializers.SerializerMethodField()
     lastSeenAt = serializers.DateTimeField(source="last_seen_at", read_only=True)
 
     class Meta:
         model = Device
-        fields = ["id", "name", "classroomId", "isActive", "hasKey", "lastSeenAt"]
+        fields = ["id", "name", "classroomId", "labId", "isActive", "hasKey", "lastSeenAt"]
 
     def get_hasKey(self, device):
         return bool(device.key_hash)

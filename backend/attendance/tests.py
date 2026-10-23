@@ -88,13 +88,20 @@ class LiveTests(AttendanceViewTestCase):
             self.tap("04A1B2C3")
         self.assertEqual(len(self.staff.get(LIVE).json()["recentScans"]), 25)
 
+    def reader_info(self, reader_id):
+        return next(r for r in self.staff.get(LIVE).json()["readers"] if r["id"] == reader_id)
+
     def test_readers_show_key_and_last_seen(self):
-        readers = self.staff.get(LIVE).json()["readers"]
-        self.assertEqual(readers[0]["id"], "READER-ROOM-101")
-        self.assertTrue(readers[0]["hasKey"])
-        self.assertIsNone(readers[0]["lastSeenAt"])
+        room = self.reader_info("READER-ROOM-101")
+        self.assertTrue(room["hasKey"])
+        self.assertIsNone(room["lastSeenAt"])
+        self.assertEqual((room["classroomId"], room["labId"]), ("ROOM-101", None))
         self.tap("04A1B2C3")
-        self.assertIsNotNone(self.staff.get(LIVE).json()["readers"][0]["lastSeenAt"])
+        self.assertIsNotNone(self.reader_info("READER-ROOM-101")["lastSeenAt"])
+
+    def test_lab_readers_show_their_lab(self):
+        lab = self.reader_info("READER-LAB001")
+        self.assertEqual((lab["classroomId"], lab["labId"]), (None, "LAB001"))
 
     def test_manual_records_appear_with_source(self):
         session = self.open_session()

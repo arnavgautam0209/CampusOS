@@ -3,6 +3,7 @@ import secrets
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -18,7 +19,11 @@ class Device(models.Model):
     name = models.CharField(max_length=120)
     classroom = models.ForeignKey(
         "attendance.Classroom", null=True, blank=True, on_delete=models.SET_NULL, related_name="devices",
-        help_text="The room this reader is mounted in. Scans are only accepted for this room.",
+        help_text="Classroom reader: marks attendance while a session is open in this room.",
+    )
+    lab = models.ForeignKey(
+        "labs.Lab", null=True, blank=True, on_delete=models.SET_NULL, related_name="readers",
+        help_text="Lab door reader: checks students in to their booking for this lab.",
     )
     is_active = models.BooleanField(default=True)
     key_hash = models.CharField(max_length=64, blank=True, editable=False)
@@ -29,6 +34,10 @@ class Device(models.Model):
 
     class Meta:
         ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(check=Q(classroom__isnull=True) | Q(lab__isnull=True),
+                                   name="reader_in_classroom_or_lab_not_both"),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.id})"
@@ -51,15 +60,22 @@ class ScanEvent(models.Model):
         DUPLICATE = "duplicate", "Already marked"
         UNKNOWN_CARD = "unknown_card", "Unknown card"
         NO_SESSION = "no_session", "No open session"
-        WRONG_CLASSROOM = "wrong_classroom", "Wrong classroom"
+        WRONG_CLASSROOM = "wrong_classroom", "Wrong classroom or lab"
+        GRANTED = "granted", "Lab access granted"
+        ALREADY_CHECKED_IN = "already_checked_in", "Already checked in"
+        DENIED = "denied", "Lab access denied"
 
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="scans")
     uid = models.CharField(max_length=20)
-    classroom_id_sent = models.CharField(max_length=32)
+    classroom_id_sent = models.CharField(max_length=32, verbose_name="location sent",
+                                         help_text="The classroomId or labId the reader sent.")
     result = models.CharField(max_length=20, choices=Result.choices)
+    reason = models.CharField(max_length=32, blank=True, help_text="Why lab access was denied.")
     student = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     session = models.ForeignKey("attendance.AttendanceSession", null=True, blank=True,
                                 on_delete=models.SET_NULL, related_name="+")
+    booking = models.ForeignKey("bookings.Booking", null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
