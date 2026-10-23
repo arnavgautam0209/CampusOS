@@ -1,7 +1,10 @@
+from io import StringIO
+
 from django.contrib.admin.sites import site
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -230,3 +233,41 @@ class SessionControlTests(AttendanceViewTestCase):
         session.refresh_from_db()
         self.assertEqual(session.closed_by, self.prof)
         self.assertIsNotNone(session.closed_at)
+
+
+class HardwareCommandTests(TestCase):
+    def setUp(self):
+        call_command("seed_demo", verbosity=0)
+
+    def run_command(self, *args):
+        out = StringIO()
+        call_command(*args, stdout=out)
+        return out.getvalue()
+
+    def test_register_student_creates_user_and_card(self):
+        self.run_command("register_student", "ECE001", "a1:b2:c3:d4", "--name", "Asha Verma")
+        student = get_user_model().objects.get(username="ECE001")
+        self.assertEqual(student.get_full_name(), "Asha Verma")
+        self.assertFalse(student.has_usable_password())
+        self.assertEqual(CampusCard.objects.get(uid="A1B2C3D4").user, student)
+        # Running it again is safe.
+        self.run_command("register_student", "ECE001", "A1B2C3D4")
+        self.assertEqual(CampusCard.objects.count(), 1)
+
+    def test_register_student_refuses_someone_elses_card(self):
+        self.run_command("register_student", "ECE001", "A1B2C3D4")
+        with self.assertRaises(CommandError):
+            self.run_command("register_student", "ECE002", "A1B2C3D4")
+        with self.assertRaises(CommandError):
+            self.run_command("register_student", "ECE003", "not-hex")
+
+    def test_open_and_close_session(self):
+        self.assertIn("Opened", self.run_command("open_session", "ECE", "Test lecture"))
+        self.assertTrue(AttendanceSession.objects.filter(classroom_id="ECE", closed_at__isnull=True).exists())
+        with self.assertRaises(CommandError):
+            self.run_command("open_session", "ECE")
+        self.assertIn("Closed", self.run_command("open_session", "ECE", "--close"))
+        with self.assertRaises(CommandError):
+            self.run_command("open_session", "ECE", "--close")
+        with self.assertRaises(CommandError):
+            self.run_command("open_session", "NOPE")

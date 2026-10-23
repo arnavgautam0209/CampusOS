@@ -120,6 +120,10 @@ REST_FRAMEWORK = {
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
 }
 
+# Lets /api/scan/ accept card taps WITHOUT a device key, for local hardware testing only.
+# Ignored unless DEBUG is on. Never enable on a shared or deployed server.
+CAMPUSOS_OPEN_SCAN = env_bool("CAMPUSOS_OPEN_SCAN", False)
+
 # AI planner: "auto" tries Claude (needs ANTHROPIC_API_KEY) and falls back to keyword
 # matching; "keywords" never calls Claude.
 PLANNER_ENGINE = os.environ.get("CAMPUSOS_PLANNER_ENGINE", "auto")

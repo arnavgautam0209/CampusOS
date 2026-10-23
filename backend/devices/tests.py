@@ -4,7 +4,7 @@ from io import StringIO
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -388,3 +388,136 @@ class LabCheckInTests(TestCase):
         self.assertEqual(response.status_code, 400)
         booking.refresh_from_db()
         self.assertEqual(booking.status, "active")
+
+
+SIMPLE_URL = "/api/scan/"
+
+
+class SimpleScanTests(TestCase):
+    """POST /api/scan/ {card_uid, classroom}: the AttendX firmware contract."""
+
+    def setUp(self):
+        call_command("seed_demo", verbosity=0)
+        User = get_user_model()
+        self.student = User.objects.create_user("ECE001", first_name="Asha", last_name="Verma",
+                                                password="unused-test-pw")
+        CampusCard.objects.create(uid="A1B2C3D4", user=self.student)
+        self.client = APIClient()
+        self.session = AttendanceSession.objects.create(classroom_id="ECE", title="ECE Lab Lecture 1")
+
+    def scan(self, uid="A1B2C3D4", classroom="ECE", client=None):
+        return (client or self.client).post(SIMPLE_URL, {"card_uid": uid, "classroom": classroom}, format="json")
+
+
+@override_settings(DEBUG=True, CAMPUSOS_OPEN_SCAN=True)
+class SimpleScanOpenModeTests(SimpleScanTests):
+    def test_present_created(self):
+        response = self.scan()
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(
+            {k: body[k] for k in ["status", "created", "student", "roll_number", "classroom", "message"]},
+            {"status": "present", "created": True, "student": "Asha Verma", "roll_number": "ECE001",
+             "classroom": "ECE", "message": "Attendance marked successfully"},
+        )
+        record = AttendanceRecord.objects.get()
+        self.assertEqual((record.student, record.session, record.device_id),
+                         (self.student, self.session, "READER-ECE"))
+        self.assertEqual(ScanEvent.objects.get().device_id, "READER-ECE")
+
+    def test_duplicate_is_200_not_created(self):
+        self.scan()
+        response = self.scan()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.json()["status"], response.json()["created"], response.json()["message"]),
+                         ("present", False, "Attendance already marked"))
+        self.assertEqual(AttendanceRecord.objects.count(), 1)
+
+    def test_unknown_card_is_404_and_creates_nothing(self):
+        users_before = get_user_model().objects.count()
+        response = self.scan(uid="DEADBEEF")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"status": "unknown_card", "message": "Card is not registered",
+                                           "card_uid": "DEADBEEF", "classroom": "ECE"})
+        self.assertFalse(AttendanceRecord.objects.exists())
+        self.assertEqual(get_user_model().objects.count(), users_before)
+
+    def test_uid_and_classroom_are_normalized(self):
+        self.assertEqual(self.scan(uid="a1:b2:c3:d4", classroom="ece").status_code, 201)
+        self.assertEqual(self.scan(uid=" a1 b2-c3 d4 ").json()["created"], False)
+
+    def test_no_open_session_is_409(self):
+        self.session.closed_at = timezone.now()
+        self.session.save()
+        response = self.scan()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["status"], "no_session")
+
+    def test_validation_errors_are_400_with_field_messages(self):
+        cases = [
+            ({"classroom": "ECE"}, "card_uid"),
+            ({"card_uid": "ZZZ", "classroom": "ECE"}, "card_uid"),
+            ({"card_uid": "A1B2C3"}, "classroom"),
+            ({"card_uid": "A1B2C3D4", "classroom": "NOPE"}, "classroom"),
+        ]
+        for payload, field in cases:
+            response = self.client.post(SIMPLE_URL, payload, format="json")
+            self.assertEqual(response.status_code, 400, payload)
+            self.assertEqual(response.json()["status"], "error")
+            self.assertIn(field, response.json()["errors"])
+        self.assertFalse(AttendanceRecord.objects.exists())
+
+    def test_not_json_is_400(self):
+        response = self.client.post(SIMPLE_URL, "card_uid=A1B2C3D4", content_type="text/plain")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Content-Type", response.json()["message"])
+
+    def test_classroom_without_reader_is_400(self):
+        Classroom.objects.create(id="MECH", name="Mechanical")
+        AttendanceSession.objects.create(classroom_id="MECH", title="x")
+        response = self.scan(classroom="MECH")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("No reader", response.json()["message"])
+
+    def test_wrong_device_key_is_still_401(self):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION="Device dev_wrong")
+        response = self.scan(client=client)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["status"], "unauthorized")
+
+    def test_get_is_405_json(self):
+        response = self.client.get(SIMPLE_URL)
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response.json()["status"], "error")
+
+
+class SimpleScanSecuredTests(SimpleScanTests):
+    def test_without_key_is_401_by_default(self):
+        response = self.scan()
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["status"], "unauthorized")
+        self.assertIn("Authorization: Device", response.json()["message"])
+        self.assertFalse(AttendanceRecord.objects.exists())
+
+    @override_settings(DEBUG=False, CAMPUSOS_OPEN_SCAN=True)
+    def test_open_mode_is_ignored_when_debug_is_off(self):
+        self.assertEqual(self.scan().status_code, 401)
+
+    def test_device_key_works_without_open_mode(self):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Device {Device.objects.get(pk='READER-ECE').issue_key()}")
+        self.assertEqual(self.scan(client=client).status_code, 201)
+
+    def test_key_for_another_classroom_is_400(self):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Device {Device.objects.get(pk='READER-ROOM-101').issue_key()}")
+        response = self.scan(client=client)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("ROOM-101", response.json()["message"])
+
+    def test_v1_endpoint_unchanged(self):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Device {Device.objects.get(pk='READER-ECE').issue_key()}")
+        response = client.post(URL, {"uid": "A1B2C3D4", "classroomId": "ECE"}, format="json")
+        self.assertEqual((response.status_code, response.json()["result"]), (201, "marked"))

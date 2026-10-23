@@ -5,6 +5,46 @@ The ESP32 never decides by itself; it only shows the server's answer (LEDs, buzz
 
 Hardware used so far: ESP32-S3 + RC522 (13.56 MHz). PN532 works the same way: only the UID matters.
 
+## AttendX endpoint (`POST /api/scan/`)
+
+The AttendX ESP32-S3 + RC522 firmware uses this simpler contract for **classroom attendance**. It runs the same
+rules and data as `/api/v1/devices/scan/` below.
+
+```
+POST http://<MAC_WIFI_IP>:8000/api/scan/
+Content-Type: application/json
+Authorization: Device <DEVICE_KEY>      (optional only in local open-scan mode, see below)
+
+{"card_uid": "A1B2C3D4", "classroom": "ECE"}
+```
+
+| HTTP | `status` | `created` | Meaning |
+|---|---|---|---|
+| 201 | `present` | `true` | Attendance marked. Also `student`, `roll_number`, `classroom`, `card_uid`, `session`, `marked_at` |
+| 200 | `present` | `false` | Already marked in this session (duplicate tap) |
+| 404 | `unknown_card` | — | Card not registered; nothing is created |
+| 409 | `no_session` | — | No attendance session open in that classroom |
+| 400 | `error` | — | Missing/malformed `card_uid` or `classroom`, unknown classroom, not JSON. `errors` names the field |
+| 401 | `unauthorized` | — | No or wrong device key (and open-scan mode off) |
+| 500 | `error` | — | Server problem; retry later |
+
+Every response has `status` and `message`. `card_uid` may be sent as `a1:b2:c3:d4`; the server normalizes it.
+`roll_number` is the student's username (register students with their roll number as the username).
+
+**Local open-scan mode (no key):** start the server with `CAMPUSOS_OPEN_SCAN=1` (and the default `DJANGO_DEBUG=1`).
+Requests without a key are then attributed to the classroom's registered reader (`READER-ECE` for `ECE`).
+Anyone on the same Wi-Fi could then mark attendance, so use it only for bench testing; send the device key
+everywhere else.
+
+**Test setup** (in `backend/`):
+
+```bash
+.venv/bin/python manage.py seed_demo                                   # creates classroom ECE and reader READER-ECE
+.venv/bin/python manage.py register_student ECE001 A1B2C3D4 --name "Asha Verma"
+.venv/bin/python manage.py open_session ECE "ECE Lecture 1"           # --close to close it
+CAMPUSOS_OPEN_SCAN=1 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,<MAC_WIFI_IP> .venv/bin/python manage.py runserver 0.0.0.0:8000
+```
+
 ## Scan API contract
 
 ```

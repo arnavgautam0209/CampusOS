@@ -12,6 +12,7 @@ from bookings import services as bookings
 
 from .authentication import DeviceKeyAuthentication, IsDevice
 from .models import ScanEvent
+from .scanning import log_scan, scan_for_attendance
 
 Result = ScanEvent.Result
 
@@ -56,26 +57,20 @@ class ScanView(APIView):
             self.log(device, uid, classroom_id, Result.WRONG_CLASSROOM)
             return self.error(f"This reader is registered to {device.classroom_id}, not {classroom_id}.")
 
-        card = attendance.active_card(uid)
-        if card is None:
-            self.log(device, uid, classroom_id, Result.UNKNOWN_CARD)
+        scan = scan_for_attendance(device, uid, classroom_id)
+        if scan.result == Result.UNKNOWN_CARD:
             return self.reply(status.HTTP_404_NOT_FOUND, Result.UNKNOWN_CARD,
                               f"Card {uid} is not registered.", uid=uid)
-
-        session = attendance.open_session_for(classroom_id)
-        if session is None:
-            self.log(device, uid, classroom_id, Result.NO_SESSION, student=card.user)
+        if scan.result == Result.NO_SESSION:
             return self.reply(status.HTTP_409_CONFLICT, Result.NO_SESSION,
                               f"No attendance session is open in {classroom_id}.", uid=uid)
 
-        record, created = attendance.mark_from_card(session, card, device)
-        result = Result.MARKED if created else Result.DUPLICATE
-        self.log(device, uid, classroom_id, result, student=card.user, session=session)
-        name = attendance.display_name(card.user)
+        created = scan.result == Result.MARKED
+        name = attendance.display_name(scan.card.user)
         message = f"Attendance marked: {name}" if created else f"Already marked: {name}"
-        return self.reply(status.HTTP_201_CREATED if created else status.HTTP_200_OK, result, message,
-                          uid=uid, student=name, sessionId=session.id, session=session.title,
-                          markedAt=record.marked_at.isoformat())
+        return self.reply(status.HTTP_201_CREATED if created else status.HTTP_200_OK, scan.result, message,
+                          uid=uid, student=name, sessionId=scan.session.id, session=scan.session.title,
+                          markedAt=scan.record.marked_at.isoformat())
 
     def lab_check_in(self, device, uid, lab_id):
         if not lab_id:
@@ -127,8 +122,4 @@ class ScanView(APIView):
     def error(message):
         return Response({"message": message, "detail": message}, status=status.HTTP_400_BAD_REQUEST)
 
-    @staticmethod
-    def log(device, uid, location_id, result, student=None, session=None, booking=None, reason=""):
-        ScanEvent.objects.create(device=device, uid=uid[:20], classroom_id_sent=location_id[:32],
-                                 result=result, student=student, session=session, booking=booking,
-                                 reason=reason)
+    log = staticmethod(log_scan)

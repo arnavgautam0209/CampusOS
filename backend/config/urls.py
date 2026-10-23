@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.urls import include, path
+
+from devices.simple_scan import SimpleScanView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -25,4 +27,6 @@ api_v1 = [
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", include(api_v1)),
+    # AttendX ESP32 firmware contract (firmware/README.md); same rules as /api/v1/devices/scan/.
+    path("api/scan/", SimpleScanView.as_view(), name="simple-scan"),
 ]

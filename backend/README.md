@@ -45,6 +45,7 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/attendance/sessions/` | staff | `{classroomId, title}` opens a session (409 if the room already has one) |
 | POST | `/api/v1/attendance/sessions/{id}/close/` | staff | Close a session; readers in that room stop marking |
 | POST | `/api/v1/ai/planner/` | token | `{prompt}` returns recommended labs, free slots, SkillPass status, missing items and next steps (rate-limited per user) |
+| POST | `/api/scan/` | device key (or none in local open-scan mode) | AttendX firmware contract `{card_uid, classroom}` for classroom attendance; see firmware/README.md |
 | GET | `/api/v1/certifications/` | public | SkillPass catalogue |
 | GET | `/api/v1/certifications/mine/` | token | Your certification records (`status`, `isValid`, `expiresAt`) |
 | POST | `/api/v1/certifications/{id}/request/` | token | Ask faculty to certify you (creates a pending record) |
@@ -74,6 +75,8 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - A reader is registered to one classroom. Scans are accepted only while faculty have an **attendance session** open there (from the app's ProxyGuard dashboard or admin → Attendance sessions). Who opened and closed each session is recorded. The database allows one open session per classroom and one record per student per session.
 - Card UIDs are registered to students in admin → Campus cards. Every tap, including unknown cards, is logged in admin → Scan events.
 - Faculty can add attendance by hand in a session's admin page; those rows are marked `manual`.
+- Hardware testing commands: `register_student <roll_number> <card_uid> --name "..."` (username = roll number) and `open_session <classroom> [title]` / `open_session <classroom> --close`.
+- `CAMPUSOS_OPEN_SCAN=1` lets `/api/scan/` accept taps without a device key, only while `DJANGO_DEBUG` is on. Before any shared or production use: leave it off, issue every reader a key, use HTTPS, and register readers per classroom.
 - Limitation: a UID isn't identity proof, and enrolment isn't checked yet. See firmware/README.md.
 
 ## Lab check-in

@@ -65,8 +65,9 @@ EQUIPMENT_REQUIREMENTS = {
 }
 
 # Attendance demo: one classroom with one reader. Keys come from `manage.py device_key`.
-DEMO_CLASSROOMS = [("ROOM-101", "Lecture Room 101, Block A")]
-DEMO_DEVICES = [("READER-ROOM-101", "Room 101 card reader", "ROOM-101")]
+DEMO_CLASSROOMS = [("ROOM-101", "Lecture Room 101, Block A"), ("ECE", "ECE Classroom")]
+DEMO_DEVICES = [("READER-ROOM-101", "Room 101 card reader", "ROOM-101"),
+                ("READER-ECE", "ECE classroom reader (AttendX ESP32-S3)", "ECE")]
 # Lab door readers check students in to their booking.
 DEMO_LAB_READERS = [("READER-LAB001", "Robotics Lab door reader", "LAB001")]
 
@@ -110,7 +111,7 @@ class Command(BaseCommand):
         if options["verbosity"]:
             self.stdout.write(self.style.SUCCESS(
                 f"Seeded {len(DEMO_LABS)} demo labs, {len(DEMO_CERTIFICATIONS)} certifications, "
-                f"{len(DEMO_CLASSROOMS)} classroom, {len(DEMO_DEVICES)} classroom reader and "
+                f"{len(DEMO_CLASSROOMS)} classrooms, {len(DEMO_DEVICES)} classroom readers and "
                 f"{len(DEMO_LAB_READERS)} lab reader."))
             for device_id, *_ in DEMO_DEVICES + DEMO_LAB_READERS:
                 if not Device.objects.filter(id=device_id).exclude(key_hash="").exists():
