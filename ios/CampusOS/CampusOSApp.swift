@@ -6,6 +6,7 @@ struct CampusOSApp: App {
     @StateObject private var labs: LabStore
     @StateObject private var bookings: BookingStore
     @StateObject private var skillPass: SkillPassStore
+    @StateObject private var attendance: AttendanceStore
 
     init() {
         let api = APIClient()
@@ -13,6 +14,7 @@ struct CampusOSApp: App {
         _labs = StateObject(wrappedValue: LabStore(api: api))
         _bookings = StateObject(wrappedValue: BookingStore(service: APIBookingService(api: api)))
         _skillPass = StateObject(wrappedValue: SkillPassStore(service: APISkillPassService(api: api)))
+        _attendance = StateObject(wrappedValue: AttendanceStore(service: APIAttendanceService(api: api)))
     }
 
     var body: some Scene {
@@ -22,6 +24,7 @@ struct CampusOSApp: App {
                 .environmentObject(labs)
                 .environmentObject(bookings)
                 .environmentObject(skillPass)
+                .environmentObject(attendance)
         }
     }
 }

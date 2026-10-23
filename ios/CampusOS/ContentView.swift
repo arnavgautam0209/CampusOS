@@ -4,6 +4,7 @@ struct ContentView: View {
     @EnvironmentObject private var auth: AuthManager
     @EnvironmentObject private var bookings: BookingStore
     @EnvironmentObject private var skillPass: SkillPassStore
+    @EnvironmentObject private var attendance: AttendanceStore
 
     var body: some View {
         TabView {
@@ -24,6 +25,7 @@ struct ContentView: View {
             if !signedIn {
                 bookings.reset()
                 skillPass.reset()
+                attendance.reset()
             }
         }
     }

@@ -28,6 +28,14 @@ struct PreviewSkillPassService: SkillPassService {
     }
 }
 
+struct PreviewAttendanceService: AttendanceService {
+    func fetchLive() async throws -> AttendanceLive {
+        AttendanceLive(generatedAt: Date(), openSessions: [], readers: [], recentScans: [])
+    }
+
+    func fetchMine() async throws -> [MyAttendance] { [] }
+}
+
 extension View {
     @MainActor
     func previewEnvironment() -> some View {
@@ -36,6 +44,7 @@ extension View {
             .environmentObject(LabStore(fetchLabs: { DemoLabs.all }))
             .environmentObject(BookingStore(service: PreviewBookingService()))
             .environmentObject(SkillPassStore(service: PreviewSkillPassService()))
+            .environmentObject(AttendanceStore(service: PreviewAttendanceService()))
     }
 }
 #endif
