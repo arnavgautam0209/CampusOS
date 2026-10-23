@@ -4,27 +4,49 @@ struct ProfileView: View {
     @EnvironmentObject private var auth: AuthManager
 
     var body: some View {
+        Group {
+            if auth.isSignedIn {
+                profile
+            } else {
+                SignInView()
+            }
+        }
+        .navigationTitle("Profile")
+    }
+
+    private var profile: some View {
         Form {
             Section {
                 HStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.fill")
                         .font(.system(size: 48)).foregroundStyle(.indigo)
                     VStack(alignment: .leading) {
-                        Text(auth.currentUser.name).font(.headline)
-                        Text(auth.currentUser.email).font(.caption)
-                            .foregroundStyle(.secondary)
+                        if let user = auth.currentUser {
+                            Text(user.name).font(.headline)
+                            if !user.email.isEmpty {
+                                Text(user.email).font(.caption).foregroundStyle(.secondary)
+                            }
+                        } else {
+                            ProgressView()
+                        }
                     }
                 }
             }
-            Section("Account") {
-                LabeledContent("Student ID", value: auth.currentUser.id)
-                LabeledContent("Role", value: auth.currentUser.role.rawValue.capitalized)
+            if let user = auth.currentUser {
+                Section("Account") {
+                    LabeledContent("User ID", value: user.id)
+                    LabeledContent("Role", value: user.role.rawValue.capitalized)
+                }
+            }
+            Section("Server") {
+                LabeledContent("Connected to", value: AppConfig.baseURL.absoluteString)
             }
             Section {
-                Text("Demo profile. Backend authentication will replace this sample identity.")
-                    .foregroundStyle(.secondary)
+                Button("Sign Out", role: .destructive) { auth.signOut() }
             }
         }
-        .navigationTitle("Profile")
+        .task {
+            if auth.currentUser == nil { await auth.refreshProfile() }
+        }
     }
 }

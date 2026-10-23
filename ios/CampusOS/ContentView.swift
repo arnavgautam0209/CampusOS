@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject private var auth: AuthManager
+    @EnvironmentObject private var bookings: BookingStore
+
     var body: some View {
         TabView {
             NavigationStack { HomeView() }
@@ -16,11 +19,12 @@ struct ContentView: View {
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
         .tint(.indigo)
+        .onChange(of: auth.isSignedIn) { _, signedIn in
+            if !signedIn { bookings.reset() }
+        }
     }
 }
 
 #Preview {
-    ContentView()
-        .environmentObject(BookingStore())
-        .environmentObject(AuthManager())
+    ContentView().previewEnvironment()
 }

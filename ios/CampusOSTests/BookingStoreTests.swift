@@ -2,152 +2,183 @@ import Foundation
 import Testing
 @testable import CampusOS
 
+/// Records calls and returns canned results instead of talking to Django.
+final class FakeBookingService: BookingService {
+    var storedBookings: [LabBooking] = []
+    var fetchError: Error?
+    var createError: Error?
+    var cancelError: Error?
+    private(set) var createCalls: [(labID: String, start: Date, durationMinutes: Int)] = []
+    private(set) var cancelledIDs: [UUID] = []
+
+    func fetchBookings() async throws -> [LabBooking] {
+        if let fetchError { throw fetchError }
+        return storedBookings
+    }
+
+    func createBooking(labID: String, start: Date, durationMinutes: Int) async throws -> LabBooking {
+        createCalls.append((labID, start, durationMinutes))
+        if let createError { throw createError }
+        return LabBooking(id: UUID(), labID: labID, labName: "Lab \(labID)", start: start,
+                          end: start.addingTimeInterval(TimeInterval(durationMinutes * 60)), status: .active)
+    }
+
+    func cancelBooking(id: UUID) async throws -> LabBooking {
+        cancelledIDs.append(id)
+        if let cancelError { throw cancelError }
+        let original = storedBookings.first { $0.id == id }!
+        return LabBooking(id: id, labID: original.labID, labName: original.labName,
+                          start: original.start, end: original.end, status: .cancelled)
+    }
+}
+
 @MainActor
 @Suite("BookingStore")
-final class BookingStoreTests {
-    private let suiteName = "BookingStoreTests-\(UUID().uuidString)"
-    private let defaults: UserDefaults
+struct BookingStoreTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    private let service = FakeBookingService()
 
     private let openLab = Lab(id: "LAB-OPEN", name: "Open Lab", location: "Test",
                               symbol: "cpu", capacity: 10, equipment: [], isOpenForBooking: true)
-    private let otherLab = Lab(id: "LAB-OTHER", name: "Other Lab", location: "Test",
-                               symbol: "bolt", capacity: 10, equipment: [], isOpenForBooking: true)
     private let closedLab = Lab(id: "LAB-CLOSED", name: "Closed Lab", location: "Test",
                                 symbol: "printer", capacity: 10, equipment: [], isOpenForBooking: false)
 
-    init() {
-        defaults = UserDefaults(suiteName: suiteName)!
-    }
-
-    deinit {
-        UserDefaults().removePersistentDomain(forName: suiteName)
-    }
-
     private func makeStore() -> BookingStore {
         let fixedNow = now
-        return BookingStore(defaults: defaults, now: { fixedNow })
+        return BookingStore(service: service, now: { fixedNow })
     }
 
     private func hoursFromNow(_ hours: Double) -> Date {
         now.addingTimeInterval(hours * 3600)
     }
 
-    @Test func reserveAddsBookingWithRequestedDuration() throws {
+    private func booking(hours: Double, status: LabBooking.Status = .active) -> LabBooking {
+        LabBooking(id: UUID(), labID: openLab.id, labName: openLab.name,
+                   start: hoursFromNow(hours), end: hoursFromNow(hours + 1), status: status)
+    }
+
+    // Loading
+
+    @Test func loadFetchesBookingsFromService() async {
+        service.storedBookings = [booking(hours: 2)]
+        let store = makeStore()
+
+        await store.load()
+
+        #expect(store.bookings == service.storedBookings)
+        #expect(store.loadState == .loaded)
+    }
+
+    @Test func loadFailureIsReportedWithMessage() async {
+        service.fetchError = APIError.unreachable
+        let store = makeStore()
+
+        await store.load()
+
+        #expect(store.loadState == .failed(APIError.unreachable.localizedDescription))
+        #expect(store.bookings.isEmpty)
+    }
+
+    @Test func upcomingHidesCancelledAndFinishedAndSortsByStart() async {
+        let later = booking(hours: 5)
+        let sooner = booking(hours: 1)
+        service.storedBookings = [later, booking(hours: 3, status: .cancelled), booking(hours: -3), sooner]
+        let store = makeStore()
+
+        await store.load()
+
+        #expect(store.upcoming.map(\.id) == [sooner.id, later.id])
+    }
+
+    @Test func resetClearsEverything() async {
+        service.storedBookings = [booking(hours: 2)]
+        let store = makeStore()
+        await store.load()
+
+        store.reset()
+
+        #expect(store.bookings.isEmpty)
+        #expect(store.loadState == .idle)
+    }
+
+    // Reserving
+
+    @Test func reserveSendsRequestAndAddsServerBooking() async throws {
         let store = makeStore()
         let start = hoursFromNow(2)
 
-        try store.reserve(lab: openLab, start: start, durationMinutes: 120)
+        try await store.reserve(lab: openLab, start: start, durationMinutes: 120)
 
-        #expect(store.bookings.count == 1)
-        let booking = try #require(store.bookings.first)
-        #expect(booking.labID == openLab.id)
-        #expect(booking.labName == openLab.name)
-        #expect(booking.start == start)
-        #expect(booking.end == start.addingTimeInterval(120 * 60))
+        #expect(service.createCalls.count == 1)
+        #expect(service.createCalls.first?.labID == openLab.id)
+        #expect(service.createCalls.first?.start == start)
+        #expect(service.createCalls.first?.durationMinutes == 120)
+        #expect(store.upcoming.count == 1)
+        #expect(store.upcoming.first?.end == start.addingTimeInterval(120 * 60))
     }
 
-    @Test func defaultDurationIsOneHour() throws {
+    @Test func serverConflictIsSurfacedAndNothingIsAdded() async {
+        service.createError = APIError.conflict("This lab already has an overlapping reservation.")
         let store = makeStore()
-        try store.reserve(lab: openLab, start: hoursFromNow(1))
-        let booking = try #require(store.bookings.first)
-        #expect(booking.end.timeIntervalSince(booking.start) == 3600)
-    }
 
-    @Test func closedLabIsRejected() {
-        let store = makeStore()
-        #expect(throws: BookingFailure.closed) {
-            try store.reserve(lab: closedLab, start: hoursFromNow(1))
+        await #expect(throws: APIError.conflict("This lab already has an overlapping reservation.")) {
+            try await store.reserve(lab: openLab, start: hoursFromNow(2))
         }
         #expect(store.bookings.isEmpty)
+    }
+
+    @Test func closedLabIsRejectedWithoutCallingServer() async {
+        let store = makeStore()
+        await #expect(throws: BookingFailure.closed) {
+            try await store.reserve(lab: closedLab, start: hoursFromNow(1))
+        }
+        #expect(service.createCalls.isEmpty)
     }
 
     @Test(arguments: [0, -30])
-    func nonPositiveDurationIsRejected(minutes: Int) {
+    func nonPositiveDurationIsRejectedWithoutCallingServer(minutes: Int) async {
         let store = makeStore()
-        #expect(throws: BookingFailure.invalidDuration) {
-            try store.reserve(lab: openLab, start: hoursFromNow(1), durationMinutes: minutes)
+        await #expect(throws: BookingFailure.invalidDuration) {
+            try await store.reserve(lab: openLab, start: hoursFromNow(1), durationMinutes: minutes)
         }
-        #expect(store.bookings.isEmpty)
+        #expect(service.createCalls.isEmpty)
     }
 
-    @Test func pastStartIsRejected() {
+    @Test(arguments: [-1.0, 0.0])
+    func pastOrCurrentStartIsRejectedWithoutCallingServer(hours: Double) async {
         let store = makeStore()
-        #expect(throws: BookingFailure.past) {
-            try store.reserve(lab: openLab, start: hoursFromNow(-1))
+        await #expect(throws: BookingFailure.past) {
+            try await store.reserve(lab: openLab, start: hoursFromNow(hours))
         }
+        #expect(service.createCalls.isEmpty)
     }
 
-    @Test func startExactlyNowIsRejected() {
+    // Cancelling
+
+    @Test func cancelMarksBookingCancelledAndRemovesItFromUpcoming() async throws {
+        let first = booking(hours: 2)
+        let second = booking(hours: 4)
+        service.storedBookings = [first, second]
         let store = makeStore()
-        #expect(throws: BookingFailure.past) {
-            try store.reserve(lab: openLab, start: now)
+        await store.load()
+
+        try await store.cancel(first)
+
+        #expect(service.cancelledIDs == [first.id])
+        #expect(store.bookings.first { $0.id == first.id }?.status == .cancelled)
+        #expect(store.upcoming.map(\.id) == [second.id])
+    }
+
+    @Test func failedCancelLeavesBookingActive() async {
+        let first = booking(hours: 2)
+        service.storedBookings = [first]
+        service.cancelError = APIError.invalid("This booking has already ended.")
+        let store = makeStore()
+        await store.load()
+
+        await #expect(throws: APIError.invalid("This booking has already ended.")) {
+            try await store.cancel(first)
         }
-    }
-
-    @Test func overlappingBookingInSameLabIsRejected() throws {
-        let store = makeStore()
-        try store.reserve(lab: openLab, start: hoursFromNow(2), durationMinutes: 60)
-
-        // Starts 30 minutes into the existing booking.
-        #expect(throws: BookingFailure.conflict) {
-            try store.reserve(lab: openLab, start: hoursFromNow(2.5), durationMinutes: 60)
-        }
-        // Fully contains the existing booking.
-        #expect(throws: BookingFailure.conflict) {
-            try store.reserve(lab: openLab, start: hoursFromNow(1.5), durationMinutes: 120)
-        }
-        #expect(store.bookings.count == 1)
-    }
-
-    @Test func backToBackBookingsAreAllowed() throws {
-        let store = makeStore()
-        try store.reserve(lab: openLab, start: hoursFromNow(2), durationMinutes: 60)
-        try store.reserve(lab: openLab, start: hoursFromNow(3), durationMinutes: 60)
-        try store.reserve(lab: openLab, start: hoursFromNow(1), durationMinutes: 60)
-        #expect(store.bookings.count == 3)
-    }
-
-    @Test func sameTimeInDifferentLabIsAllowed() throws {
-        let store = makeStore()
-        try store.reserve(lab: openLab, start: hoursFromNow(2))
-        try store.reserve(lab: otherLab, start: hoursFromNow(2))
-        #expect(store.bookings.count == 2)
-    }
-
-    @Test func cancelRemovesOnlyThatBookingAndFreesTheSlot() throws {
-        let store = makeStore()
-        try store.reserve(lab: openLab, start: hoursFromNow(2))
-        try store.reserve(lab: otherLab, start: hoursFromNow(2))
-        let toCancel = try #require(store.bookings.first { $0.labID == openLab.id })
-
-        store.cancel(toCancel)
-
-        #expect(store.bookings.map(\.labID) == [otherLab.id])
-        try store.reserve(lab: openLab, start: hoursFromNow(2))
-        #expect(store.bookings.count == 2)
-    }
-
-    @Test func bookingsPersistAcrossStoreInstances() throws {
-        let first = makeStore()
-        try first.reserve(lab: openLab, start: hoursFromNow(2))
-        let saved = try #require(first.bookings.first)
-
-        let reloaded = makeStore()
-
-        #expect(reloaded.bookings.count == 1)
-        #expect(reloaded.bookings.first?.id == saved.id)
-        // Overlap checking still applies to bookings loaded from storage.
-        #expect(throws: BookingFailure.conflict) {
-            try reloaded.reserve(lab: openLab, start: hoursFromNow(2))
-        }
-    }
-
-    @Test func cancellationPersists() throws {
-        let first = makeStore()
-        try first.reserve(lab: openLab, start: hoursFromNow(2))
-        first.cancel(try #require(first.bookings.first))
-
-        #expect(makeStore().bookings.isEmpty)
+        #expect(store.upcoming.map(\.id) == [first.id])
     }
 }

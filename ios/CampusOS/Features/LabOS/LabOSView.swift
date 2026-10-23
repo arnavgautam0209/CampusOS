@@ -1,13 +1,49 @@
 import SwiftUI
 
 struct LabOSView: View {
-    private let labs = DemoLabs.all
+    @EnvironmentObject private var labStore: LabStore
 
     var body: some View {
-        ScrollView {
+        Group {
+            if labStore.labs.isEmpty {
+                emptyState
+            } else {
+                labList
+            }
+        }
+        .navigationTitle("LabOS")
+        .task { await labStore.loadIfNeeded() }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if let message = labStore.loadState.errorMessage {
+            ContentUnavailableView {
+                Label("Can't Load Labs", systemImage: "wifi.exclamationmark")
+            } description: {
+                Text(message)
+            } actions: {
+                Button("Try Again") { Task { await labStore.load() } }
+                    .buttonStyle(.borderedProminent)
+            }
+        } else if labStore.loadState == .loaded {
+            ContentUnavailableView("No Labs Yet", systemImage: "building.2",
+                                   description: Text("The server has no laboratories listed."))
+        } else {
+            ProgressView("Loading labs…")
+        }
+    }
+
+    private var labList: some View {
+        let labs = labStore.labs
+        return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Find an available lab and reserve a workstation.")
                     .foregroundStyle(.secondary)
+                if let message = labStore.loadState.errorMessage {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
                 HStack(spacing: 12) {
                     metric("Total Labs", "\(labs.count)", "building.2")
                     metric("Bookable", "\(labs.filter { $0.isOpenForBooking }.count)", "checkmark.circle")
@@ -35,12 +71,12 @@ struct LabOSView: View {
                         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
                     }
                 }
-                Text("Demo laboratory data — no live university feed yet.")
+                Text("Live data from the CampusOS server. Pull down to refresh.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding()
         }
-        .navigationTitle("LabOS")
+        .refreshable { await labStore.load() }
     }
 
     private func metric(_ title: String, _ value: String, _ icon: String) -> some View {
