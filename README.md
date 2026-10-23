@@ -5,7 +5,7 @@
 ## Repository layout
 - `ios/` – Xcode project; app source in `ios/CampusOS/` (`Core/` + `Features/`), unit tests in `ios/CampusOSTests/`
 - `backend/` – Django REST API (see [backend/README.md](backend/README.md))
-- `firmware/` – reserved for ESP32 + PN532 firmware
+- `firmware/` – ESP32 card-reader notes and the scan API contract ([firmware/README.md](firmware/README.md))
 
 ## Run the iOS app
 1. Install Xcode 16 or newer (the project uses synchronized folders: new files in `ios/CampusOS/` are added to the app automatically).
@@ -39,8 +39,9 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 **Backend**
 - `/api/v1/` health, token auth + `/auth/me/`, labs (read-only), bookings (create/list/cancel) with server-side conflict checks and tests
 - SkillPass: certifications with faculty approval, expiry and revocation; restricted labs refuse bookings (403) without the required certification
+- Attendance: ESP32 readers POST card taps to `/api/v1/devices/scan/` with a device key. Attendance is marked only while faculty have a session open in that room, with duplicate protection and a log of every scan
 
-**Not yet built:** real roles, an in-app faculty approval screen (use Django admin), NFC/ESP32 events, sensor telemetry, attendance, AI planning.
+**Not yet built:** real roles, an in-app faculty approval screen (use Django admin), showing attendance and scans in the iOS app, sensor telemetry, the full ProxyGuard verification flow, AI planning.
 
 ## Ground rules
 - The backend is the source of truth. Anything shown from local demo data is labelled as demo data.

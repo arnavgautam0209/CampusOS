@@ -39,6 +39,7 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/bookings/` | token | `{labID, start (ISO 8601), durationMinutes}` |
 | GET | `/api/v1/bookings/{id}/` | token | One of your bookings |
 | POST | `/api/v1/bookings/{id}/cancel/` | token | Cancel an active, unfinished booking |
+| POST | `/api/v1/devices/scan/` | device key | Card tap from a reader. See [firmware/README.md](../firmware/README.md) for the full contract |
 | GET | `/api/v1/certifications/` | public | SkillPass catalogue |
 | GET | `/api/v1/certifications/mine/` | token | Your certification records (`status`, `isValid`, `expiresAt`) |
 | POST | `/api/v1/certifications/{id}/request/` | token | Ask faculty to certify you (creates a pending record) |
@@ -63,6 +64,13 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - Equipment requirements are stored and shown in the API but not enforced yet (no equipment checkout exists).
 - Demo: as `demo_student`, open Electronics Lab in the app. Booking is refused. Tap **Request Training** (on the lab or the SkillPass screen), approve it in `/admin/` (Skillpass → User certifications → *Approve selected*), pull to refresh SkillPass, and book again.
 
+## Attendance and readers
+- Readers authenticate with `Authorization: Device <key>`. Keys are issued with `manage.py device_key <DEVICE_ID>` or the admin action *Generate new key*. They are shown once and only a hash is stored.
+- A reader is registered to one classroom. Scans are accepted only while faculty have an **attendance session** open there (admin → Attendance sessions). The database allows one open session per classroom and one record per student per session.
+- Card UIDs are registered to students in admin → Campus cards. Every tap, including unknown cards, is logged in admin → Scan events.
+- Faculty can add attendance by hand in a session's admin page; those rows are marked `manual`.
+- Limitation: a UID isn't identity proof, and enrolment isn't checked yet. See firmware/README.md.
+
 ## Layout
 ```
 config/     settings (env-driven), root URLs, /api/v1/ routing
@@ -70,7 +78,9 @@ accounts/   token sign-in and /auth/me/
 labs/       Lab + Equipment models, read-only API, seed_demo command
 bookings/   Booking model, booking rules (services.py), API
 skillpass/  certifications, approval workflow, access checks
+attendance/ classrooms, campus cards, attendance sessions and records
+devices/    readers, device-key auth, /devices/scan/, scan log, device_key command
 ```
 
 ## Not yet built
-Real roles and permissions, server-side sign-out (token revocation), equipment checkout (to enforce equipment certifications), IoT devices and NFC scans, telemetry, attendance, AI planner, PostgreSQL configuration.
+Real roles and permissions, server-side sign-out (token revocation), equipment checkout (to enforce equipment certifications), telemetry, course enrolment checks, the full ProxyGuard verification flow, AI planner, PostgreSQL configuration.
