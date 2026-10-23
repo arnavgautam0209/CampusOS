@@ -5,17 +5,22 @@ struct ContentView: View {
         TabView {
             NavigationStack { HomeView() }
                 .tabItem { Label("Home", systemImage: "house.fill") }
+
             NavigationStack { MyBookingsView() }
                 .tabItem { Label("Bookings", systemImage: "calendar") }
+
             NavigationStack { AIPlannerView() }
                 .tabItem { Label("AI Planner", systemImage: "sparkles") }
+
             NavigationStack { ProfileView() }
-                .tabItem { Label("Profile", systemImage: "person.fill") }
+                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
         .tint(.indigo)
     }
 }
 
 #Preview {
-    ContentView().environmentObject(BookingStore())
+    ContentView()
+        .environmentObject(BookingStore())
+        .environmentObject(AuthManager())
 }

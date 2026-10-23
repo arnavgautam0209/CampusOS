@@ -1,6 +1,8 @@
 import Foundation
-struct Equipment: Identifiable {
-    let id: UUID
+
+struct Equipment: Identifiable, Codable, Hashable {
+    let id: String
     let name: String
-    let availableUnits: Int
+    let category: String
+    let isAvailable: Bool
 }

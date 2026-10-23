@@ -1,6 +1,12 @@
 import Foundation
+
+enum CampusRole: String, Codable, CaseIterable {
+    case student, faculty, administrator
+}
+
 struct CampusUser: Identifiable, Codable {
-    var id: String
-    var displayName: String
-    var role: String
+    let id: String
+    let name: String
+    let email: String
+    let role: CampusRole
 }

@@ -3,6 +3,9 @@ import Combine
 
 @MainActor
 final class AuthManager: ObservableObject {
-    @Published var demoRole = "student"
-    // Future: Django authentication, secure token storage, server permissions.
+    // Demo identity only; replace with backend-issued authentication.
+    @Published var currentUser = CampusUser(
+        id: "STU001", name: "Campus Student",
+        email: "student@example.edu", role: .student
+    )
 }

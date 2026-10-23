@@ -2,36 +2,44 @@ import SwiftUI
 
 struct LabDetailView: View {
     let lab: Lab
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Image(systemName: lab.symbol).font(.system(size: 52))
+                Image(systemName: lab.symbol)
+                    .font(.system(size: 54))
                     .foregroundStyle(.indigo)
-                    .frame(maxWidth: .infinity)
-                    .padding(28)
-                    .background(Color.indigo.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .frame(maxWidth: .infinity, minHeight: 140)
+                    .background(.indigo.opacity(0.09), in: RoundedRectangle(cornerRadius: 18))
                 Text(lab.name).font(.largeTitle.bold())
-                Label(lab.location, systemImage: "mappin")
-                Label("\(lab.capacity) seats", systemImage: "person.2")
-                StatusBadge(text: lab.isOpenForBooking ? "Accepting bookings" : "Unavailable",
-                            available: lab.isOpenForBooking)
+                Label(lab.location, systemImage: "mappin.and.ellipse")
+                    .foregroundStyle(.secondary)
+                Label("Capacity: \(lab.capacity)", systemImage: "person.3")
+                StatusBadge(text: lab.isOpenForBooking ? "Open for bookings" : "Currently closed",
+                            color: lab.isOpenForBooking ? .green : .red)
                 Divider()
                 Text("Equipment").font(.title2.bold())
-                ForEach(lab.equipment, id: \.self) { item in
-                    Label(item, systemImage: "checkmark.circle")
+                ForEach(lab.equipment) { item in
+                    HStack {
+                        Image(systemName: item.isAvailable ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(item.isAvailable ? .green : .red)
+                        Text(item.name)
+                        Spacer()
+                        Text(item.isAvailable ? "Available" : "Unavailable")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Divider()
-                NavigationLink {
-                    LabBookingView(lab: lab)
-                } label: {
-                    Text("Reserve Lab").frame(maxWidth: .infinity).padding(10)
+                NavigationLink { LabBookingView(lab: lab) } label: {
+                    Text("Reserve Laboratory")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!lab.isOpenForBooking)
-                Text("Demo only: bookings are stored on this device.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }.padding()
+            }
+            .padding()
         }
         .navigationTitle("Lab Details")
         .navigationBarTitleDisplayMode(.inline)

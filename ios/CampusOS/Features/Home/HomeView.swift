@@ -1,68 +1,64 @@
 import SwiftUI
 
 struct HomeView: View {
-    private let services: [(name: String, caption: String, icon: String)] = [
-        ("LabOS", "Labs & equipment", "flask.fill"),
-        ("AssetX", "Inventory & tools", "shippingbox.fill"),
-        ("SafeLab", "Safety monitoring", "shield.fill"),
-        ("SpacePulse", "Rooms & bookings", "building.2.fill"),
-        ("SkillPass", "Skills & access", "checkmark.seal.fill"),
-        ("ProxyGuard", "Attendance integrity", "person.crop.rectangle.stack")
-    ]
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Text("Welcome to CampusOS 👋")
-                    .font(.largeTitle.bold())
-                Text("Your entire campus, in one app.")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Welcome to CampusOS 👋")
+                        .font(.largeTitle.bold())
+                    Text("Your entire campus, in one app.")
+                        .foregroundStyle(.secondary)
+                }
+
                 NavigationLink {
                     AIPlannerView()
                 } label: {
                     HStack(spacing: 14) {
-                        Image(systemName: "sparkles").font(.title)
+                        Image(systemName: "sparkles")
+                            .font(.title2)
+                            .foregroundStyle(.purple)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Campus AI").font(.headline)
-                            Text("Plan your next project").font(.subheadline)
+                            Text("Campus AI Planner").font(.headline)
+                            Text("Tell us what you want to build")
+                                .font(.subheadline).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Image(systemName: "arrow.right")
                     }
+                    .foregroundStyle(.primary)
                     .padding()
-                    .background(Color.indigo.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .background(Color.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
                 }
-                .buttonStyle(.plain)
 
                 Text("Campus Services").font(.title2.bold())
+
                 LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(services, id: \.name) { item in
-                        NavigationLink {
-                            destination(for: item.name)
-                        } label: {
-                            ModuleCard(title: item.name, subtitle: item.caption, symbol: item.icon)
-                        }
-                        .buttonStyle(.plain)
+                    NavigationLink { LabOSView() } label: {
+                        ModuleCard(title: "LabOS", subtitle: "Labs & equipment", symbol: "flask.fill", tint: .indigo)
+                    }
+                    NavigationLink { AssetXView() } label: {
+                        ModuleCard(title: "AssetX", subtitle: "Inventory & tools", symbol: "shippingbox.fill", tint: .orange)
+                    }
+                    NavigationLink { SafeLabView() } label: {
+                        ModuleCard(title: "SafeLab", subtitle: "Safety monitoring", symbol: "shield.fill", tint: .red)
+                    }
+                    NavigationLink { SpacePulseView() } label: {
+                        ModuleCard(title: "SpacePulse", subtitle: "Rooms & bookings", symbol: "building.2.fill", tint: .teal)
+                    }
+                    NavigationLink { SkillPassView() } label: {
+                        ModuleCard(title: "SkillPass", subtitle: "Skills & access", symbol: "checkmark.seal.fill", tint: .green)
+                    }
+                    NavigationLink { ProxyGuardView() } label: {
+                        ModuleCard(title: "ProxyGuard", subtitle: "Attendance integrity", symbol: "person.crop.rectangle.stack.fill", tint: .purple)
                     }
                 }
+                .buttonStyle(.plain)
             }
             .padding()
         }
         .navigationTitle("CampusOS")
-    }
-
-    @ViewBuilder
-    private func destination(for name: String) -> some View {
-        switch name {
-        case "LabOS": LabOSView()
-        case "AssetX": AssetXView()
-        case "SafeLab": SafeLabView()
-        case "SpacePulse": SpacePulseView()
-        case "SkillPass": SkillPassView()
-        case "ProxyGuard": ProxyGuardView()
-        default: Text("Coming soon")
-        }
     }
 }

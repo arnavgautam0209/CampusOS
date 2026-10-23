@@ -1,22 +1,27 @@
 import SwiftUI
 
 struct AIPlannerView: View {
-    @State private var idea = ""
+    @State private var projectIdea = ""
+
     var body: some View {
         Form {
             Section {
                 Label("Campus AI Planner", systemImage: "sparkles")
-                    .font(.title2.bold())
-                Text("Describe what you want to build. Resource recommendations will be connected to a verified backend later.")
+                    .font(.headline)
+                Text("Tell CampusOS what you want to build.")
                     .foregroundStyle(.secondary)
-            }
-            Section("Project idea") {
-                TextField("e.g. Build a line-following robot", text: $idea, axis: .vertical)
+                TextField("e.g. Build a line-following robot", text: $projectIdea,
+                          axis: .vertical)
                     .lineLimit(3...6)
             }
-            if !idea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Section("Next step") {
-                    Text("Idea saved in this screen. AI recommendations aren't enabled yet.")
+            Section("Planning status") {
+                if projectIdea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Enter an idea to begin.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Idea captured: \(projectIdea)")
+                    Text("AI recommendations will appear once the backend is integrated.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

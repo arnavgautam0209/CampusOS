@@ -2,14 +2,14 @@ import SwiftUI
 
 struct StatusBadge: View {
     let text: String
-    let available: Bool
+    let color: Color
+
     var body: some View {
         Text(text)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(available ? .green : .orange)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background((available ? Color.green : Color.orange).opacity(0.1))
-            .clipShape(Capsule())
+            .background(color.opacity(0.12), in: Capsule())
     }
 }
