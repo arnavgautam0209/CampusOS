@@ -42,6 +42,8 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/devices/scan/` | device key | Card tap from a reader. See [firmware/README.md](../firmware/README.md) for the full contract |
 | GET | `/api/v1/attendance/live/` | staff | Open sessions with who's present, readers, and the latest 25 scans (polled by the app) |
 | GET | `/api/v1/attendance/mine/` | token | Your attendance records, newest first |
+| POST | `/api/v1/attendance/sessions/` | staff | `{classroomId, title}` opens a session (409 if the room already has one) |
+| POST | `/api/v1/attendance/sessions/{id}/close/` | staff | Close a session; readers in that room stop marking |
 | GET | `/api/v1/certifications/` | public | SkillPass catalogue |
 | GET | `/api/v1/certifications/mine/` | token | Your certification records (`status`, `isValid`, `expiresAt`) |
 | POST | `/api/v1/certifications/{id}/request/` | token | Ask faculty to certify you (creates a pending record) |
@@ -68,7 +70,7 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 
 ## Attendance and readers
 - Readers authenticate with `Authorization: Device <key>`. Keys are issued with `manage.py device_key <DEVICE_ID>` or the admin action *Generate new key*. They are shown once and only a hash is stored.
-- A reader is registered to one classroom. Scans are accepted only while faculty have an **attendance session** open there (admin → Attendance sessions). The database allows one open session per classroom and one record per student per session.
+- A reader is registered to one classroom. Scans are accepted only while faculty have an **attendance session** open there (from the app's ProxyGuard dashboard or admin → Attendance sessions). Who opened and closed each session is recorded. The database allows one open session per classroom and one record per student per session.
 - Card UIDs are registered to students in admin → Campus cards. Every tap, including unknown cards, is logged in admin → Scan events.
 - Faculty can add attendance by hand in a session's admin page; those rows are marked `manual`.
 - Limitation: a UID isn't identity proof, and enrolment isn't checked yet. See firmware/README.md.

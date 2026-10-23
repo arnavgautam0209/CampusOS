@@ -62,8 +62,9 @@ On the Mac running Django (`backend/`):
    - **Attendance → Campus cards → Add**: register each card UID to a student user.
      Tip: tap an unregistered card first. The reader gets `unknown_card` with the `uid`, and
      **Devices → Scan events** shows it too.
-   - **Attendance → Attendance sessions → Add**: open a session for `ROOM-101`. Close it afterwards with
-     the *Close selected sessions* action.
+   - Open a session for `ROOM-101`: in the iOS app as a staff user, **Home → ProxyGuard → Open Session…**
+     (or admin → **Attendance → Attendance sessions → Add**). Close it with **Close Session** in the app
+     (or the admin *Close selected sessions* action).
 5. Tap cards and watch them arrive in the iOS app: **Home → ProxyGuard** signed in as a staff user shows the live
    dashboard; a student sees their own attendance. They also appear in admin under **Attendance sessions** and **Scan events**.
 
