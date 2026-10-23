@@ -8,6 +8,7 @@ from .serializers import LabSerializer
 class LabViewSet(viewsets.ReadOnlyModelViewSet):
     """Public lab catalogue. Changes are made by staff through Django admin."""
 
-    queryset = Lab.objects.prefetch_related("equipment")
+    queryset = Lab.objects.prefetch_related(
+        "required_certifications", "equipment", "equipment__required_certifications")
     serializer_class = LabSerializer
     permission_classes = [AllowAny]

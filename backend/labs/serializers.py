@@ -6,16 +6,21 @@ from .models import Equipment, Lab
 # Field names are camelCase so the iOS Codable structs decode them directly.
 class EquipmentSerializer(serializers.ModelSerializer):
     isAvailable = serializers.BooleanField(source="is_available")
+    requiredCertifications = serializers.PrimaryKeyRelatedField(
+        source="required_certifications", many=True, read_only=True)
 
     class Meta:
         model = Equipment
-        fields = ["id", "name", "category", "isAvailable"]
+        fields = ["id", "name", "category", "isAvailable", "requiredCertifications"]
 
 
 class LabSerializer(serializers.ModelSerializer):
     equipment = EquipmentSerializer(many=True, read_only=True)
     isOpenForBooking = serializers.BooleanField(source="is_open_for_booking")
+    requiredCertifications = serializers.PrimaryKeyRelatedField(
+        source="required_certifications", many=True, read_only=True)
 
     class Meta:
         model = Lab
-        fields = ["id", "name", "location", "symbol", "capacity", "equipment", "isOpenForBooking"]
+        fields = ["id", "name", "location", "symbol", "capacity", "equipment", "isOpenForBooking",
+                  "requiredCertifications"]

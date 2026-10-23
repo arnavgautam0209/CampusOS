@@ -159,6 +159,17 @@ struct NetworkTests {
         }
     }
 
+    @Test func missingCertificationShowsSkillPassMessage() async {
+        StubURLProtocol.reset(.init(status: 403, json: """
+        {"detail":"This lab requires certification: Basic Electronics Safety. Ask faculty to approve your training in SkillPass.",
+         "missingCertifications":["CERT-ELEC-BASIC"]}
+        """))
+        await #expect(throws: APIError.invalid(
+            "This lab requires certification: Basic Electronics Safety. Ask faculty to approve your training in SkillPass.")) {
+            let _: LabBooking = try await makeClient(token: "abc").post("bookings/", authenticated: true)
+        }
+    }
+
     @Test func serverErrorWithoutJSONMapsToStatus() async {
         StubURLProtocol.reset(.init(status: 500, json: "<html>oops</html>"))
         await #expect(throws: APIError.server(500)) {

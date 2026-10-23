@@ -9,6 +9,10 @@ class Lab(models.Model):
     symbol = models.CharField(max_length=64, help_text="SF Symbol name shown in the iOS app.")
     capacity = models.PositiveIntegerField()
     is_open_for_booking = models.BooleanField(default=True)
+    required_certifications = models.ManyToManyField(
+        "skillpass.Certification", blank=True, related_name="required_for_labs",
+        help_text="Students must hold all of these (approved and unexpired) to book the lab.",
+    )
 
     class Meta:
         ordering = ["id"]
@@ -23,6 +27,10 @@ class Equipment(models.Model):
     name = models.CharField(max_length=120)
     category = models.CharField(max_length=60)
     is_available = models.BooleanField(default=True)
+    required_certifications = models.ManyToManyField(
+        "skillpass.Certification", blank=True, related_name="required_for_equipment",
+        help_text="Certifications needed to operate this equipment (shown to students; enforced at checkout later).",
+    )
 
     class Meta:
         ordering = ["id"]

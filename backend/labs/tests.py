@@ -24,11 +24,17 @@ class LabApiTests(TestCase):
         robotics = labs[0]
         self.assertEqual(
             set(robotics),
-            {"id", "name", "location", "symbol", "capacity", "equipment", "isOpenForBooking"},
+            {"id", "name", "location", "symbol", "capacity", "equipment", "isOpenForBooking",
+             "requiredCertifications"},
         )
-        self.assertEqual(set(robotics["equipment"][0]), {"id", "name", "category", "isAvailable"})
+        self.assertEqual(set(robotics["equipment"][0]),
+                         {"id", "name", "category", "isAvailable", "requiredCertifications"})
         self.assertTrue(robotics["isOpenForBooking"])
         self.assertFalse(labs[2]["isOpenForBooking"])
+        self.assertEqual(robotics["requiredCertifications"], [])
+        self.assertEqual(labs[1]["requiredCertifications"], ["CERT-ELEC-BASIC"])
+        soldering = next(item for item in robotics["equipment"] if item["id"] == "EQ003")
+        self.assertEqual(soldering["requiredCertifications"], ["CERT-SOLDER"])
 
     def test_lab_detail(self):
         response = self.client.get("/api/v1/labs/LAB002/")

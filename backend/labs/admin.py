@@ -12,6 +12,7 @@ class EquipmentInline(admin.TabularInline):
 class LabAdmin(admin.ModelAdmin):
     list_display = ["id", "name", "location", "capacity", "is_open_for_booking"]
     list_filter = ["is_open_for_booking"]
+    filter_horizontal = ["required_certifications"]
     inlines = [EquipmentInline]
 
 
@@ -19,3 +20,4 @@ class LabAdmin(admin.ModelAdmin):
 class EquipmentAdmin(admin.ModelAdmin):
     list_display = ["id", "name", "category", "lab", "is_available"]
     list_filter = ["category", "is_available", "lab"]
+    filter_horizontal = ["required_certifications"]

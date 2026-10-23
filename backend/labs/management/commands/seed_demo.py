@@ -7,6 +7,7 @@ from django.db import transaction
 from rest_framework.authtoken.models import Token
 
 from labs.models import Equipment, Lab
+from skillpass.models import Certification
 
 # Mirrors DemoLabs.all in ios/CampusOS/Core/Models/Lab.swift.
 DEMO_LABS = [
@@ -43,11 +44,27 @@ DEMO_LABS = [
     },
 ]
 
+# SkillPass catalogue. Seeding never grants certifications: faculty must approve them.
+DEMO_CERTIFICATIONS = [
+    ("CERT-ELEC-BASIC", "Basic Electronics Safety",
+     "Safe use of bench power supplies, oscilloscopes and multimeters.", 365),
+    ("CERT-SOLDER", "Soldering Station Training", "Hot tools, fume extraction and burn first aid.", 180),
+    ("CERT-ROBOT-ARM", "Robotic Arm Operation", "Motion envelopes, emergency stop and supervised use.", 180),
+    ("CERT-3DP", "3D Printer Operation", "Printer setup, materials and fire safety.", 365),
+]
+LAB_REQUIREMENTS = {"LAB002": ["CERT-ELEC-BASIC"]}
+EQUIPMENT_REQUIREMENTS = {
+    "EQ002": ["CERT-ROBOT-ARM"],
+    "EQ003": ["CERT-SOLDER"],
+    "EQ004": ["CERT-ELEC-BASIC"],
+    "EQ006": ["CERT-3DP"],
+}
+
 DEMO_USERNAME = "demo_student"
 
 
 class Command(BaseCommand):
-    help = "Load the demo labs and equipment (safe to run repeatedly)."
+    help = "Load the demo labs, equipment and SkillPass certifications (safe to run repeatedly)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -67,8 +84,16 @@ class Command(BaseCommand):
                     id=eq_id,
                     defaults={"lab": lab, "name": name, "category": category, "is_available": available},
                 )
+        for cert_id, name, description, validity_days in DEMO_CERTIFICATIONS:
+            Certification.objects.update_or_create(
+                id=cert_id, defaults={"name": name, "description": description, "validity_days": validity_days})
+        for lab_id, cert_ids in LAB_REQUIREMENTS.items():
+            Lab.objects.get(pk=lab_id).required_certifications.set(cert_ids)
+        for equipment_id, cert_ids in EQUIPMENT_REQUIREMENTS.items():
+            Equipment.objects.get(pk=equipment_id).required_certifications.set(cert_ids)
         if options["verbosity"]:
-            self.stdout.write(self.style.SUCCESS(f"Seeded {len(DEMO_LABS)} demo labs."))
+            self.stdout.write(self.style.SUCCESS(
+                f"Seeded {len(DEMO_LABS)} demo labs and {len(DEMO_CERTIFICATIONS)} certifications."))
 
         if options["demo_user"]:
             self._create_demo_user()

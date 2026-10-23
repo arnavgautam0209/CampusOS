@@ -90,7 +90,7 @@ class BookingApiTests(TestCase):
         self.assertEqual(self.book(hours=0).status_code, 201)
         self.assertEqual(self.book(hours=1).status_code, 201)
         self.assertEqual(self.book(hours=-1).status_code, 201)
-        self.assertEqual(self.book(lab="LAB002", hours=0).status_code, 201)
+        self.assertEqual(self.book(lab="LAB004", hours=0).status_code, 201)
 
     def test_cancelled_booking_frees_the_slot(self):
         booking_id = self.book().json()["id"]
@@ -103,10 +103,10 @@ class BookingApiTests(TestCase):
         self.book()
         bob = APIClient()
         bob.force_authenticate(self.bob)
-        self.book(lab="LAB002", client=bob)
+        self.book(lab="LAB004", client=bob)
 
         self.assertEqual([b["labID"] for b in self.client.get(URL).json()], ["LAB001"])
-        self.assertEqual([b["labID"] for b in bob.get(URL).json()], ["LAB002"])
+        self.assertEqual([b["labID"] for b in bob.get(URL).json()], ["LAB004"])
 
     def test_cannot_cancel_someone_elses_booking(self):
         booking_id = self.book().json()["id"]

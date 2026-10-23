@@ -11,6 +11,7 @@ from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, ValidationError
 
 from labs.models import Lab
+from skillpass.services import ensure_lab_access
 
 from .models import Booking
 
@@ -42,6 +43,8 @@ def create_booking(user, lab_id, start, duration_minutes):
             raise NotFound("Lab not found.")
         if not lab.is_open_for_booking:
             raise ValidationError({"labID": "This lab is not accepting bookings."})
+        # SkillPass: certifications must stay valid for the whole session.
+        ensure_lab_access(user, lab, valid_until=end)
 
         overlaps = Booking.objects.filter(
             lab=lab, status=Booking.Status.ACTIVE, start__lt=end, end__gt=start
