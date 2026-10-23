@@ -45,6 +45,34 @@ Example:
 - Use an HTTP timeout of ~5 s and check `WiFi.status()` before each POST; reconnect if dropped.
 - Keep Wi-Fi credentials and the device key in a `secrets.h` that is **not committed** (add it to `.gitignore`).
 
+## Lab door readers (check-in)
+
+A reader can instead be registered to a **lab** (admin → Devices → set *Lab*, leave *Classroom* empty).
+It uses the same endpoint and key header, but sends `labId`:
+
+```json
+{"uid": "04A1B2C3", "labId": "LAB001"}
+```
+
+The server checks that the card's student has **their own active booking for this lab right now**
+(check-in opens 10 minutes before the start) and every **SkillPass certification** the lab needs, valid until
+the booking ends. The first granted tap records the actual session start, which the student then sees on the
+booking in the app.
+
+| HTTP | `result` | Meaning | Suggested feedback |
+|---|---|---|---|
+| 201 | `granted` | Checked in. `message` says until when | Green LED, 1 beep, show `message` |
+| 200 | `already_checked_in` | Repeat tap during the same booking | Green LED, 2 beeps |
+| 403 | `denied` | Not allowed in. `reason` is `no_booking`, `too_early`, `certification_required` or `lab_closed` | Red LED, long beep, show `message` |
+| 404 | `unknown_card` | Card not registered | Red LED |
+| 400 / 401 | — | Same as classroom readers (wrong `labId`, bad key, …) | Print `message` |
+
+Example: `{"result": "denied", "reason": "too_early", "message": "Alice Rao: Too early. Check in from 13:50."}`
+
+The demo seed creates `READER-LAB001` for the Robotics Lab door; issue its key with
+`manage.py device_key READER-LAB001`. A granted tap is a record and a signal only: this prototype must not
+drive real locks or equipment power.
+
 ## Setting up a demo (backend side)
 
 On the Mac running Django (`backend/`):
