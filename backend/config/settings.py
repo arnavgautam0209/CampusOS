@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "labs",
     "bookings",
     "skillpass",
+    "attendance",
+    "devices",
 ]
 
 MIDDLEWARE = [

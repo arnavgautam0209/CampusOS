@@ -17,6 +17,7 @@ api_v1 = [
     path("", include("labs.urls")),
     path("", include("bookings.urls")),
     path("", include("skillpass.urls")),
+    path("", include("devices.urls")),
 ]
 
 urlpatterns = [

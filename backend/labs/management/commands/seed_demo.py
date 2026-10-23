@@ -7,6 +7,8 @@ from django.db import transaction
 from rest_framework.authtoken.models import Token
 
 from labs.models import Equipment, Lab
+from attendance.models import Classroom
+from devices.models import Device
 from skillpass.models import Certification
 
 # Mirrors DemoLabs.all in ios/CampusOS/Core/Models/Lab.swift.
@@ -60,11 +62,15 @@ EQUIPMENT_REQUIREMENTS = {
     "EQ006": ["CERT-3DP"],
 }
 
+# Attendance demo: one classroom with one reader. Keys come from `manage.py device_key`.
+DEMO_CLASSROOMS = [("ROOM-101", "Lecture Room 101, Block A")]
+DEMO_DEVICES = [("READER-ROOM-101", "Room 101 card reader", "ROOM-101")]
+
 DEMO_USERNAME = "demo_student"
 
 
 class Command(BaseCommand):
-    help = "Load the demo labs, equipment and SkillPass certifications (safe to run repeatedly)."
+    help = "Load demo labs, equipment, SkillPass certifications, a classroom and a reader (safe to rerun)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -91,9 +97,16 @@ class Command(BaseCommand):
             Lab.objects.get(pk=lab_id).required_certifications.set(cert_ids)
         for equipment_id, cert_ids in EQUIPMENT_REQUIREMENTS.items():
             Equipment.objects.get(pk=equipment_id).required_certifications.set(cert_ids)
+        for classroom_id, name in DEMO_CLASSROOMS:
+            Classroom.objects.update_or_create(id=classroom_id, defaults={"name": name})
+        for device_id, name, classroom_id in DEMO_DEVICES:
+            Device.objects.update_or_create(id=device_id, defaults={"name": name, "classroom_id": classroom_id})
         if options["verbosity"]:
             self.stdout.write(self.style.SUCCESS(
-                f"Seeded {len(DEMO_LABS)} demo labs and {len(DEMO_CERTIFICATIONS)} certifications."))
+                f"Seeded {len(DEMO_LABS)} demo labs, {len(DEMO_CERTIFICATIONS)} certifications, "
+                f"{len(DEMO_CLASSROOMS)} classroom and {len(DEMO_DEVICES)} reader."))
+            if not Device.objects.filter(id=DEMO_DEVICES[0][0]).exclude(key_hash="").exists():
+                self.stdout.write(f"Issue the reader's key with: manage.py device_key {DEMO_DEVICES[0][0]}")
 
         if options["demo_user"]:
             self._create_demo_user()
