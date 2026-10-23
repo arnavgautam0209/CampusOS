@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.urls import include, path
-from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -14,7 +13,7 @@ def health(request):
 
 api_v1 = [
     path("health/", health, name="health"),
-    path("auth/token/", obtain_auth_token, name="auth-token"),
+    path("", include("accounts.urls")),
     path("", include("labs.urls")),
     path("", include("bookings.urls")),
 ]

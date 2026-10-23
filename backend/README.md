@@ -1,6 +1,6 @@
 # CampusOS Backend (Django REST API)
 
-The backend is the **source of truth** for shared campus data. The iOS app and ESP32 terminals both talk to it. The iOS app does not use it yet; it still reads its own demo data.
+The backend is the **source of truth** for shared campus data. The iOS app's LabOS screens (labs, sign-in, bookings) use it; ESP32 terminals will too.
 
 ## Setup
 
@@ -22,7 +22,9 @@ Admin site: create an account with `.venv/bin/python manage.py createsuperuser`,
 Run tests: `.venv/bin/python manage.py test`
 
 ### Reaching it from an iPhone or ESP32
-Run `runserver 0.0.0.0:8000` and add your Mac's LAN IP to `DJANGO_ALLOWED_HOSTS` (see `.env.example`). The iOS Simulator can use `127.0.0.1` directly.
+Run `runserver 0.0.0.0:8000` and add your Mac's LAN IP to `DJANGO_ALLOWED_HOSTS` (see `.env.example`). In the app, enter that address in the **Server** field on the sign-in screen (e.g. `192.168.1.20:8000`). The iOS Simulator can use the default `127.0.0.1` directly.
+
+Roles are temporary: superuser = administrator, staff = faculty, everyone else = student.
 
 ## API (v1)
 
@@ -30,6 +32,7 @@ Run `runserver 0.0.0.0:8000` and add your Mac's LAN IP to `DJANGO_ALLOWED_HOSTS`
 |---|---|---|---|
 | GET | `/api/v1/health/` | public | Liveness check |
 | POST | `/api/v1/auth/token/` | public | `{username, password}` → `{token}` |
+| GET | `/api/v1/auth/me/` | token | Signed-in user `{id, name, email, role}` (same shape as iOS `CampusUser`) |
 | GET | `/api/v1/labs/` | public | Labs with equipment (same JSON shape as iOS `Lab`) |
 | GET | `/api/v1/labs/{id}/` | public | One lab |
 | GET | `/api/v1/bookings/` | token | Your bookings (staff see all) |
@@ -50,9 +53,10 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 ## Layout
 ```
 config/     settings (env-driven), root URLs, /api/v1/ routing
+accounts/   token sign-in and /auth/me/
 labs/       Lab + Equipment models, read-only API, seed_demo command
 bookings/   Booking model, booking rules (services.py), API
 ```
 
 ## Not yet built
-Roles (student/faculty/admin), SkillPass certifications, IoT devices and NFC scans, telemetry, attendance, AI planner, PostgreSQL configuration.
+Real roles and permissions, server-side sign-out (token revocation), SkillPass certifications, IoT devices and NFC scans, telemetry, attendance, AI planner, PostgreSQL configuration.
