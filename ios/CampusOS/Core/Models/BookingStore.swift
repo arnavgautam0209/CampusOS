@@ -29,9 +29,14 @@ final class BookingStore: ObservableObject {
     }
 
     private let storageKey = "campusos_demo_lab_bookings_v1"
+    private let defaults: UserDefaults
+    private let now: () -> Date
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: storageKey),
+    // Tests inject an isolated UserDefaults suite and a fixed clock.
+    init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
+        self.defaults = defaults
+        self.now = now
+        if let data = defaults.data(forKey: storageKey),
            let saved = try? JSONDecoder().decode([LabBooking].self, from: data) {
             bookings = saved
         }
@@ -40,7 +45,7 @@ final class BookingStore: ObservableObject {
     func reserve(lab: Lab, start: Date, durationMinutes: Int = 60) throws {
         guard lab.isOpenForBooking else { throw BookingFailure.closed }
         guard durationMinutes > 0 else { throw BookingFailure.invalidDuration }
-        guard start > Date() else { throw BookingFailure.past }
+        guard start > now() else { throw BookingFailure.past }
         let end = start.addingTimeInterval(TimeInterval(durationMinutes * 60))
         let overlaps = bookings.contains {
             $0.labID == lab.id && $0.start < end && start < $0.end
@@ -56,7 +61,7 @@ final class BookingStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(bookings) {
-            UserDefaults.standard.set(data, forKey: storageKey)
+            defaults.set(data, forKey: storageKey)
         }
     }
 }

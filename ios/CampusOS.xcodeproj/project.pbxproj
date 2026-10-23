@@ -13,6 +13,7 @@
     LastUpgradeCheck = 1600;
     TargetAttributes = {
      A10000000000000000000002 = { CreatedOnToolsVersion = 16.0; };
+     A10000000000000000000012 = { CreatedOnToolsVersion = 16.0; TestTargetID = A10000000000000000000002; };
     };
    };
    buildConfigurationList = A10000000000000000000007;
@@ -26,7 +27,7 @@
    productRefGroup = A10000000000000000000004;
    projectDirPath = "";
    projectRoot = "";
-   targets = (A10000000000000000000002);
+   targets = (A10000000000000000000002, A10000000000000000000012);
   };
   A10000000000000000000002 = {
    isa = PBXNativeTarget;
@@ -47,12 +48,12 @@
   };
   A10000000000000000000003 = {
    isa = PBXGroup;
-   children = (A10000000000000000000005, A10000000000000000000004);
+   children = (A10000000000000000000005, A10000000000000000000010, A10000000000000000000004);
    sourceTree = "<group>";
   };
   A10000000000000000000004 = {
    isa = PBXGroup;
-   children = (A10000000000000000000006);
+   children = (A10000000000000000000006, A10000000000000000000011);
    name = Products;
    sourceTree = "<group>";
   };
@@ -161,6 +162,96 @@
     TARGETED_DEVICE_FAMILY = "1,2";
    };
    name = Release;
+  };
+  A10000000000000000000010 = {
+   isa = PBXFileSystemSynchronizedRootGroup;
+   path = CampusOSTests;
+   sourceTree = "<group>";
+  };
+  A10000000000000000000011 = {
+   isa = PBXFileReference;
+   explicitFileType = wrapper.cfbundle;
+   includeInIndex = 0;
+   path = CampusOSTests.xctest;
+   sourceTree = BUILT_PRODUCTS_DIR;
+  };
+  A10000000000000000000012 = {
+   isa = PBXNativeTarget;
+   buildConfigurationList = A10000000000000000000017;
+   buildPhases = (
+    A10000000000000000000013,
+    A10000000000000000000014,
+    A10000000000000000000015,
+   );
+   buildRules = ();
+   dependencies = (A10000000000000000000016);
+   fileSystemSynchronizedGroups = (A10000000000000000000010);
+   name = CampusOSTests;
+   packageProductDependencies = ();
+   productName = CampusOSTests;
+   productReference = A10000000000000000000011;
+   productType = "com.apple.product-type.bundle.unit-test";
+  };
+  A10000000000000000000013 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  A10000000000000000000014 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  A10000000000000000000015 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+  A10000000000000000000016 = {
+   isa = PBXTargetDependency;
+   target = A10000000000000000000002;
+   targetProxy = A1000000000000000000001A;
+  };
+  A10000000000000000000017 = {
+   isa = XCConfigurationList;
+   buildConfigurations = (A10000000000000000000018, A10000000000000000000019);
+   defaultConfigurationIsVisible = 0;
+   defaultConfigurationName = Release;
+  };
+  A10000000000000000000018 = {
+   isa = XCBuildConfiguration;
+   buildSettings = {
+    BUNDLE_LOADER = "$(TEST_HOST)";
+    CODE_SIGN_STYLE = Automatic;
+    CURRENT_PROJECT_VERSION = 1;
+    GENERATE_INFOPLIST_FILE = YES;
+    IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+    MARKETING_VERSION = 1.0;
+    PRODUCT_BUNDLE_IDENTIFIER = com.campusos.appTests;
+    PRODUCT_NAME = "$(TARGET_NAME)";
+    SDKROOT = iphoneos;
+    SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+    SWIFT_EMIT_LOC_STRINGS = NO;
+    SWIFT_VERSION = 5.0;
+    TARGETED_DEVICE_FAMILY = "1,2";
+    TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CampusOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CampusOS";
+   };
+   name = Debug;
+  };
+  A10000000000000000000019 = {
+   isa = XCBuildConfiguration;
+   buildSettings = {
+    BUNDLE_LOADER = "$(TEST_HOST)";
+    CODE_SIGN_STYLE = Automatic;
+    CURRENT_PROJECT_VERSION = 1;
+    GENERATE_INFOPLIST_FILE = YES;
+    IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+    MARKETING_VERSION = 1.0;
+    PRODUCT_BUNDLE_IDENTIFIER = com.campusos.appTests;
+    PRODUCT_NAME = "$(TARGET_NAME)";
+    SDKROOT = iphoneos;
+    SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+    SWIFT_EMIT_LOC_STRINGS = NO;
+    SWIFT_VERSION = 5.0;
+    TARGETED_DEVICE_FAMILY = "1,2";
+    TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CampusOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CampusOS";
+   };
+   name = Release;
+  };
+  A1000000000000000000001A = {
+   isa = PBXContainerItemProxy;
+   containerPortal = A10000000000000000000001;
+   proxyType = 1;
+   remoteGlobalIDString = A10000000000000000000002;
+   remoteInfo = CampusOS;
   };
  };
  rootObject = A10000000000000000000001;
