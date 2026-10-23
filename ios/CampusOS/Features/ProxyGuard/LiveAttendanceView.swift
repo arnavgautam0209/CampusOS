@@ -173,7 +173,7 @@ struct ScanRow: View {
                 .foregroundStyle(scan.result.color)
             VStack(alignment: .leading, spacing: 2) {
                 Text(scan.student ?? "Card \(scan.uid)").font(.headline)
-                Text("\(scan.result.label) · \(scan.deviceId)")
+                Text("\(scan.detail) · \(scan.deviceId)")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -186,6 +186,11 @@ struct ScanRow: View {
 
 private struct ReaderRow: View {
     let reader: CardReader
+
+    private var location: String {
+        if let lab = reader.labId { return "Lab door · \(lab)" }
+        return reader.classroomId ?? "Not assigned"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -200,9 +205,9 @@ private struct ReaderRow: View {
             }
             Group {
                 if let lastSeen = reader.lastSeenAt {
-                    Text("\(reader.classroomId ?? "No room") · last tap \(lastSeen.formatted(.relative(presentation: .named)))")
+                    Text("\(location) · last tap \(lastSeen.formatted(.relative(presentation: .named)))")
                 } else {
-                    Text("\(reader.classroomId ?? "No room") · no taps yet")
+                    Text("\(location) · no taps yet")
                 }
             }
             .font(.caption).foregroundStyle(.secondary)
@@ -218,15 +223,18 @@ extension ScanResult {
         case .unknownCard: return "questionmark.circle.fill"
         case .noSession: return "clock.badge.xmark"
         case .wrongClassroom: return "exclamationmark.triangle.fill"
+        case .granted: return "door.left.hand.open"
+        case .alreadyCheckedIn: return "arrow.triangle.2.circlepath.circle.fill"
+        case .denied: return "lock.fill"
         case .other: return "circle"
         }
     }
 
     var color: Color {
         switch self {
-        case .marked: return .green
-        case .duplicate: return .yellow
-        case .unknownCard, .noSession, .wrongClassroom: return .red
+        case .marked, .granted: return .green
+        case .duplicate, .alreadyCheckedIn: return .yellow
+        case .unknownCard, .noSession, .wrongClassroom, .denied: return .red
         case .other: return .gray
         }
     }

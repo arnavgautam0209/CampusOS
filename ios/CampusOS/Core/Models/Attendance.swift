@@ -56,6 +56,8 @@ struct CardReader: Codable, Identifiable, Equatable {
     let id: String
     let name: String
     let classroomId: String?
+    /// Set for lab door readers (check-in) instead of classroomId.
+    let labId: String?
     let isActive: Bool
     let hasKey: Bool
     let lastSeenAt: Date?
@@ -68,8 +70,22 @@ struct ReaderScan: Codable, Identifiable, Equatable {
     let uid: String
     let result: ScanResult
     let student: String?
+    /// The classroom or lab the reader sent.
     let classroomId: String
     let createdAt: Date
+    /// Why lab access was denied ("no_booking", "too_early", ...).
+    var reason: String? = nil
+
+    var detail: String {
+        guard result == .denied, let reason, !reason.isEmpty else { return result.label }
+        let readable = [
+            "no_booking": "no booking now",
+            "too_early": "too early",
+            "certification_required": "needs certification",
+            "lab_closed": "lab closed",
+        ][reason] ?? reason.replacingOccurrences(of: "_", with: " ")
+        return "\(result.label): \(readable)"
+    }
 }
 
 enum ScanResult: String, Codable {
@@ -78,6 +94,9 @@ enum ScanResult: String, Codable {
     case unknownCard = "unknown_card"
     case noSession = "no_session"
     case wrongClassroom = "wrong_classroom"
+    case granted
+    case alreadyCheckedIn = "already_checked_in"
+    case denied
     case other
 
     // Results added on the server later still decode instead of breaking the feed.
@@ -92,7 +111,10 @@ enum ScanResult: String, Codable {
         case .duplicate: return "Already marked"
         case .unknownCard: return "Unknown card"
         case .noSession: return "No session open"
-        case .wrongClassroom: return "Wrong classroom"
+        case .wrongClassroom: return "Wrong classroom or lab"
+        case .granted: return "Lab access granted"
+        case .alreadyCheckedIn: return "Already checked in"
+        case .denied: return "Lab access denied"
         case .other: return "Other"
         }
     }

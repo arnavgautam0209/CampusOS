@@ -11,7 +11,15 @@ struct MyBookingsView: View {
         content
             .navigationTitle("My Bookings")
             .task(id: auth.isSignedIn) {
-                if auth.isSignedIn { await store.load() } else { store.reset() }
+                guard auth.isSignedIn else { return store.reset() }
+                await store.load()
+                // Keep refreshing while this screen is open so a check-in tap at
+                // the lab door shows up without pulling to refresh.
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(5))
+                    if Task.isCancelled { break }
+                    await store.refresh()
+                }
             }
             .sheet(isPresented: $showingSignIn) {
                 NavigationStack { SignInView(showsCancel: true) }
@@ -66,13 +74,17 @@ struct MyBookingsView: View {
                             .font(.subheadline).foregroundStyle(.secondary)
                         Text("Ends: \(item.end.formatted(date: .omitted, time: .shortened))")
                             .font(.caption).foregroundStyle(.secondary)
-                        if cancellingID == item.id {
-                            ProgressView()
-                        } else {
-                            Button("Cancel Booking", role: .destructive) {
-                                Task { await cancel(item) }
+                        CheckInStatus(booking: item)
+                        // Checked-in sessions can't be cancelled (the server refuses too).
+                        if item.checkedInAt == nil {
+                            if cancellingID == item.id {
+                                ProgressView()
+                            } else {
+                                Button("Cancel Booking", role: .destructive) {
+                                    Task { await cancel(item) }
+                                }
+                                .disabled(cancellingID != nil)
                             }
-                            .disabled(cancellingID != nil)
                         }
                     }
                     .padding(.vertical, 6)
@@ -89,6 +101,33 @@ struct MyBookingsView: View {
             try await store.cancel(booking)
         } catch {
             cancelError = error.localizedDescription
+        }
+    }
+}
+
+/// Where a booking stands at the lab door: upcoming, check-in open, or checked in.
+private struct CheckInStatus: View {
+    let booking: LabBooking
+
+    var body: some View {
+        // Re-evaluates every 30 s so "check-in open" appears on time.
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            switch booking.checkInState(now: context.date) {
+            case .checkedIn(let at):
+                let ongoing = context.date < booking.end
+                Label(ongoing
+                      ? "Checked in at \(at.formatted(date: .omitted, time: .shortened)) · in use until \(booking.end.formatted(date: .omitted, time: .shortened))"
+                      : "Checked in at \(at.formatted(date: .omitted, time: .shortened))",
+                      systemImage: "door.left.hand.open")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.green)
+            case .checkInOpen:
+                Label("Tap your card at the lab door to check in", systemImage: "wave.3.right")
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+            case .upcoming:
+                EmptyView()
+            }
         }
     }
 }

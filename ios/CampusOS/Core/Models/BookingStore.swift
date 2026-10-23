@@ -12,6 +12,22 @@ struct LabBooking: Identifiable, Codable, Equatable {
     let start: Date
     let end: Date
     let status: Status
+    /// When the student tapped their card at the lab door (actual session start).
+    var checkedInAt: Date? = nil
+
+    /// The server opens check-in this long before the start (bookings/services.py CHECK_IN_EARLY).
+    static let checkInOpensBefore: TimeInterval = 10 * 60
+
+    enum CheckInState: Equatable {
+        case upcoming
+        case checkInOpen
+        case checkedIn(at: Date)
+    }
+
+    func checkInState(now: Date) -> CheckInState {
+        if let checkedInAt { return .checkedIn(at: checkedInAt) }
+        return now >= start.addingTimeInterval(-LabBooking.checkInOpensBefore) ? .checkInOpen : .upcoming
+    }
 }
 
 enum BookingFailure: Error, LocalizedError {
@@ -51,6 +67,17 @@ final class BookingStore: ObservableObject {
 
     func load() async {
         loadState = .loading
+        do {
+            bookings = try await service.fetchBookings()
+            loadState = .loaded
+        } catch {
+            loadState = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Re-fetches without showing a loading state, for live updates while the
+    /// Bookings screen is open (e.g. after a check-in tap at the lab door).
+    func refresh() async {
         do {
             bookings = try await service.fetchBookings()
             loadState = .loaded

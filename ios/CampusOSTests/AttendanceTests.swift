@@ -273,6 +273,31 @@ struct AttendanceDecodingTests {
         #expect(try JSONDecoder.campusOS.decode(ReaderScan.self, from: Data(json.utf8)).result == .other)
     }
 
+    @Test func decodesLabCheckInScansAndReaders() throws {
+        let scans = """
+        [{"id":3,"deviceId":"READER-LAB001","uid":"04A1B2C3","result":"denied","reason":"too_early",
+          "student":"Alice Rao","classroomId":"LAB001","createdAt":"2026-10-24T09:01:29+00:00"},
+         {"id":2,"deviceId":"READER-LAB001","uid":"04A1B2C3","result":"granted","reason":"",
+          "student":"Alice Rao","classroomId":"LAB001","createdAt":"2026-10-24T09:01:28+00:00"},
+         {"id":1,"deviceId":"READER-LAB001","uid":"04A1B2C3","result":"already_checked_in",
+          "student":"Alice Rao","classroomId":"LAB001","createdAt":"2026-10-24T09:01:27+00:00"}]
+        """
+        let decoded = try JSONDecoder.campusOS.decode([ReaderScan].self, from: Data(scans.utf8))
+        #expect(decoded.map(\.result) == [.denied, .granted, .alreadyCheckedIn])
+        #expect(decoded[0].detail == "Lab access denied: too early")
+        #expect(decoded[1].detail == "Lab access granted")
+        #expect(decoded[2].reason == nil)
+
+        let reader = """
+        {"id":"READER-LAB001","name":"Robotics Lab door reader","classroomId":null,"labId":"LAB001",
+         "isActive":true,"hasKey":true,"lastSeenAt":null}
+        """
+        #expect(try JSONDecoder.campusOS.decode(CardReader.self, from: Data(reader.utf8)).labId == "LAB001")
+        // Older servers don't send labId.
+        let older = reader.replacingOccurrences(of: #""labId":"LAB001","#, with: "")
+        #expect(try JSONDecoder.campusOS.decode(CardReader.self, from: Data(older.utf8)).labId == nil)
+    }
+
     @Test func decodesMyAttendance() throws {
         let json = """
         [{"id":3,"sessionId":2,"session":"Lecture 2","classroomId":"ROOM-101",

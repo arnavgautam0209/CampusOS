@@ -169,6 +169,58 @@ struct BookingStoreTests {
         #expect(store.upcoming.map(\.id) == [second.id])
     }
 
+    @Test func refreshPicksUpCheckInWithoutLoadingState() async {
+        let first = booking(hours: 0.1)
+        service.storedBookings = [first]
+        let store = makeStore()
+        await store.load()
+
+        var checkedIn = first
+        checkedIn.checkedInAt = now
+        service.storedBookings = [checkedIn]
+        await store.refresh()
+
+        #expect(store.bookings.first?.checkedInAt == now)
+        #expect(store.loadState == .loaded)
+    }
+
+    @Test func failedRefreshKeepsBookings() async {
+        service.storedBookings = [booking(hours: 2)]
+        let store = makeStore()
+        await store.load()
+        service.fetchError = APIError.unreachable
+
+        await store.refresh()
+
+        #expect(store.bookings.count == 1)
+        #expect(store.loadState.errorMessage != nil)
+    }
+
+    @Test func checkInStateFollowsTheServerWindow() {
+        let upcoming = booking(hours: 1)
+        #expect(upcoming.checkInState(now: now) == .upcoming)
+        // Check-in opens 10 minutes before the start.
+        #expect(upcoming.checkInState(now: upcoming.start.addingTimeInterval(-11 * 60)) == .upcoming)
+        #expect(upcoming.checkInState(now: upcoming.start.addingTimeInterval(-10 * 60)) == .checkInOpen)
+        #expect(upcoming.checkInState(now: upcoming.start.addingTimeInterval(30 * 60)) == .checkInOpen)
+
+        var checkedIn = upcoming
+        checkedIn.checkedInAt = upcoming.start
+        #expect(checkedIn.checkInState(now: now) == .checkedIn(at: upcoming.start))
+    }
+
+    @Test func bookingDecodesCheckInFromServer() throws {
+        let checkedIn = """
+        {"id":"d808ae4a-b8e6-405b-9231-1ce929912a92","labID":"LAB001","labName":"Robotics Lab",
+         "start":"2026-10-24T10:00:00+05:30","end":"2026-10-24T11:00:00+05:30","status":"active",
+         "createdAt":"2026-10-23T23:11:17.747476+05:30","checkedInAt":"2026-10-24T09:58:12.120000+05:30"}
+        """
+        let notYet = checkedIn.replacingOccurrences(of: #""checkedInAt":"2026-10-24T09:58:12.120000+05:30""#,
+                                                    with: #""checkedInAt":null"#)
+        #expect(try JSONDecoder.campusOS.decode(LabBooking.self, from: Data(checkedIn.utf8)).checkedInAt != nil)
+        #expect(try JSONDecoder.campusOS.decode(LabBooking.self, from: Data(notYet.utf8)).checkedInAt == nil)
+    }
+
     @Test func failedCancelLeavesBookingActive() async {
         let first = booking(hours: 2)
         service.storedBookings = [first]
