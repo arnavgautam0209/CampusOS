@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from devices.models import Device, ScanEvent
 
-from .models import AttendanceRecord, AttendanceSession
+from .models import AttendanceRecord, AttendanceSession, Classroom
 from .services import display_name
 
 
@@ -26,14 +26,26 @@ class LiveSessionSerializer(serializers.ModelSerializer):
     classroomName = serializers.CharField(source="classroom.name", read_only=True)
     openedBy = serializers.SerializerMethodField()
     openedAt = serializers.DateTimeField(source="opened_at", read_only=True)
+    closedAt = serializers.DateTimeField(source="closed_at", read_only=True)
     records = SessionRecordSerializer(many=True, read_only=True)
 
     class Meta:
         model = AttendanceSession
-        fields = ["id", "title", "classroomId", "classroomName", "openedBy", "openedAt", "records"]
+        fields = ["id", "title", "classroomId", "classroomName", "openedBy", "openedAt", "closedAt", "records"]
 
     def get_openedBy(self, session):
         return display_name(session.opened_by) if session.opened_by else None
+
+
+class ClassroomSerializer(serializers.ModelSerializer):
+    hasOpenSession = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Classroom
+        fields = ["id", "name", "hasOpenSession"]
+
+    def get_hasOpenSession(self, classroom):
+        return classroom.id in self.context["open_classroom_ids"]
 
 
 class ScanSerializer(serializers.ModelSerializer):

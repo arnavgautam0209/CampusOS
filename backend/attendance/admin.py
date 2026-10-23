@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
-from django.utils import timezone
+from rest_framework.exceptions import APIException
 
+from . import services
 from .models import AttendanceRecord, AttendanceSession, CampusCard, Classroom
 
 
@@ -29,8 +30,8 @@ class AttendanceRecordInline(admin.TabularInline):
 class AttendanceSessionAdmin(admin.ModelAdmin):
     list_display = ["title", "classroom", "opened_by", "opened_at", "closed_at", "present"]
     list_filter = ["classroom", ("closed_at", admin.EmptyFieldListFilter)]
-    fields = ["classroom", "title", "opened_by", "opened_at", "closed_at"]
-    readonly_fields = ["opened_by", "opened_at", "closed_at"]
+    fields = ["classroom", "title", "opened_by", "opened_at", "closed_by", "closed_at"]
+    readonly_fields = ["opened_by", "opened_at", "closed_by", "closed_at"]
     inlines = [AttendanceRecordInline]
     actions = ["close_sessions"]
 
@@ -54,7 +55,13 @@ class AttendanceSessionAdmin(admin.ModelAdmin):
 
     @admin.action(description="Close selected sessions")
     def close_sessions(self, request, queryset):
-        closed = queryset.filter(closed_at__isnull=True).update(closed_at=timezone.now())
+        closed = 0
+        for session in queryset.filter(closed_at__isnull=True):
+            try:
+                services.close_session(session, request.user)
+                closed += 1
+            except APIException as error:
+                self.message_user(request, f"{session}: {error.detail}", messages.ERROR)
         self.message_user(request, f"Closed {closed} session(s).", messages.SUCCESS)
 
 

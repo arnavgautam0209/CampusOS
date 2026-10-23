@@ -1,6 +1,8 @@
+from django.contrib.admin.sites import site
 from django.contrib.auth import get_user_model
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -130,3 +132,94 @@ class MineTests(AttendanceViewTestCase):
 
     def test_mine_is_empty_for_new_student(self):
         self.assertEqual(self.student.get(MINE).json(), [])
+
+
+class SessionControlTests(AttendanceViewTestCase):
+    OPEN = "/api/v1/attendance/sessions/"
+
+    def close_url(self, session_id):
+        return f"/api/v1/attendance/sessions/{session_id}/close/"
+
+    def test_faculty_opens_session_and_reader_starts_marking(self):
+        self.assertEqual(self.tap("04A1B2C3").status_code, 409)
+        response = self.staff.post(self.OPEN, {"classroomId": "ROOM-101", "title": " CS201 Lecture 6 "},
+                                   format="json")
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["title"], "CS201 Lecture 6")
+        self.assertEqual(body["openedBy"], "Priya Nair")
+        self.assertIsNone(body["closedAt"])
+        self.assertEqual(AttendanceSession.objects.get(pk=body["id"]).opened_by, self.prof)
+        self.assertEqual(self.tap("04A1B2C3").status_code, 201)
+
+    def test_opening_twice_in_one_room_is_409(self):
+        self.open_session(title="Lecture 5")
+        response = self.staff.post(self.OPEN, {"classroomId": "ROOM-101", "title": "Lecture 6"}, format="json")
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Lecture 5", response.json()["detail"])
+        self.assertEqual(AttendanceSession.objects.count(), 1)
+
+    def test_open_validation(self):
+        bad = [
+            ({"classroomId": "ROOM-101", "title": "  "}, "title"),
+            ({"classroomId": "ROOM-101"}, "title"),
+            ({"classroomId": "ROOM-101", "title": "x" * 121}, "title"),
+            ({"classroomId": "NOPE", "title": "Lecture"}, "classroomId"),
+        ]
+        for payload, field in bad:
+            response = self.staff.post(self.OPEN, payload, format="json")
+            self.assertEqual(response.status_code, 400, payload)
+            self.assertIn(field, response.json())
+        self.assertFalse(AttendanceSession.objects.exists())
+
+    def test_faculty_closes_session_and_reader_stops(self):
+        session = self.open_session()
+        self.tap("04A1B2C3")
+        response = self.staff.post(self.close_url(session.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.json()["closedAt"])
+        self.assertEqual(len(response.json()["records"]), 1)
+        session.refresh_from_db()
+        self.assertEqual(session.closed_by, self.prof)
+        self.assertEqual(self.tap("0B0B0B0B").json()["result"], "no_session")
+        self.assertEqual(self.staff.get(LIVE).json()["openSessions"], [])
+
+    def test_closing_twice_is_400_and_unknown_is_404(self):
+        session = self.open_session()
+        self.staff.post(self.close_url(session.id))
+        self.assertEqual(self.staff.post(self.close_url(session.id)).status_code, 400)
+        self.assertEqual(self.staff.post(self.close_url(9999)).status_code, 404)
+
+    def test_room_can_reopen_after_close(self):
+        session = self.open_session()
+        self.staff.post(self.close_url(session.id))
+        response = self.staff.post(self.OPEN, {"classroomId": "ROOM-101", "title": "Next"}, format="json")
+        self.assertEqual(response.status_code, 201)
+
+    def test_students_and_anonymous_cannot_open_or_close(self):
+        session = self.open_session()
+        payload = {"classroomId": "ROOM-101", "title": "Sneaky"}
+        self.assertEqual(self.student.post(self.OPEN, payload, format="json").status_code, 403)
+        self.assertEqual(APIClient().post(self.OPEN, payload, format="json").status_code, 401)
+        self.assertEqual(self.student.post(self.close_url(session.id)).status_code, 403)
+        session.refresh_from_db()
+        self.assertIsNone(session.closed_at)
+
+    def test_live_lists_classrooms_with_open_state(self):
+        Classroom.objects.create(id="ROOM-102", name="Room 102")
+        self.open_session()
+        rooms = {room["id"]: room for room in self.staff.get(LIVE).json()["classrooms"]}
+        self.assertTrue(rooms["ROOM-101"]["hasOpenSession"])
+        self.assertFalse(rooms["ROOM-102"]["hasOpenSession"])
+        self.assertEqual(rooms["ROOM-102"]["name"], "Room 102")
+
+    def test_admin_close_action_records_who_closed(self):
+        session = self.open_session()
+        request = RequestFactory().post("/admin/")
+        request.user = self.prof
+        request.session = {}
+        request._messages = FallbackStorage(request)
+        site._registry[AttendanceSession].close_sessions(request, AttendanceSession.objects.all())
+        session.refresh_from_db()
+        self.assertEqual(session.closed_by, self.prof)
+        self.assertIsNotNone(session.closed_at)
