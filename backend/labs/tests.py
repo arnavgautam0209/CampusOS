@@ -1,6 +1,15 @@
+import os
+from io import StringIO
+from unittest import mock
+
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from rest_framework.test import APIClient
+
+from attendance.models import AttendanceRecord, CampusCard, Classroom
+from devices.models import Device
 
 from .models import Lab
 
@@ -48,3 +57,31 @@ class LabApiTests(TestCase):
     def test_seed_is_idempotent(self):
         call_command("seed_demo", verbosity=0)
         self.assertEqual(Lab.objects.count(), 4)
+
+
+class WalkthroughSeedTests(TestCase):
+    def test_seed_then_clean_leaves_nothing_behind(self):
+        with mock.patch.dict(os.environ, {"CAMPUSOS_WALKTHROUGH_PASSWORD": "unused-test-pw"}):
+            call_command("seed_walkthrough", stdout=StringIO())
+        self.assertEqual(get_user_model().objects.filter(username__startswith="demo_ui_").count(), 4)
+        self.assertEqual(AttendanceRecord.objects.filter(session__classroom_id="DEMO-ROOM").count(), 3)
+        self.assertTrue(Device.objects.get(pk="READER-DEMO").key_hash)
+
+        call_command("seed_walkthrough", "--clean", stdout=StringIO())
+        self.assertFalse(get_user_model().objects.filter(username__startswith="demo_ui_").exists())
+        self.assertFalse(Classroom.objects.filter(pk="DEMO-ROOM").exists())
+        self.assertFalse(Device.objects.filter(pk="READER-DEMO").exists())
+        self.assertTrue(Lab.objects.exists())  # real catalogue kept
+
+    def test_refuses_to_take_over_a_real_card(self):
+        real = get_user_model().objects.create_user("real_student", password="unused-test-pw")
+        CampusCard.objects.create(uid="D1D1D1D1", user=real)
+        with mock.patch.dict(os.environ, {"CAMPUSOS_WALKTHROUGH_PASSWORD": "unused-test-pw"}):
+            with self.assertRaises(CommandError):
+                call_command("seed_walkthrough", stdout=StringIO())
+        self.assertEqual(CampusCard.objects.get(uid="D1D1D1D1").user, real)
+
+    def test_requires_password(self):
+        with mock.patch.dict(os.environ, {"CAMPUSOS_WALKTHROUGH_PASSWORD": ""}):
+            with self.assertRaises(CommandError):
+                call_command("seed_walkthrough", stdout=StringIO())
