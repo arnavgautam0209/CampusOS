@@ -8,6 +8,24 @@ struct Lab: Identifiable, Codable, Hashable {
     let capacity: Int
     let equipment: [Equipment]
     let isOpenForBooking: Bool
+    /// SkillPass certification IDs a student must hold to book this lab.
+    var requiredCertifications: [String] = []
+}
+
+extension Lab {
+    // Defined in an extension so the memberwise initializer is kept.
+    // Older servers don't send requiredCertifications, so it is optional here.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        location = try container.decode(String.self, forKey: .location)
+        symbol = try container.decode(String.self, forKey: .symbol)
+        capacity = try container.decode(Int.self, forKey: .capacity)
+        equipment = try container.decode([Equipment].self, forKey: .equipment)
+        isOpenForBooking = try container.decode(Bool.self, forKey: .isOpenForBooking)
+        requiredCertifications = try container.decodeIfPresent([String].self, forKey: .requiredCertifications) ?? []
+    }
 }
 
 enum DemoLabs {

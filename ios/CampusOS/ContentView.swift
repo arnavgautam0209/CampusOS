@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var auth: AuthManager
     @EnvironmentObject private var bookings: BookingStore
+    @EnvironmentObject private var skillPass: SkillPassStore
 
     var body: some View {
         TabView {
@@ -20,7 +21,10 @@ struct ContentView: View {
         }
         .tint(.indigo)
         .onChange(of: auth.isSignedIn) { _, signedIn in
-            if !signedIn { bookings.reset() }
+            if !signedIn {
+                bookings.reset()
+                skillPass.reset()
+            }
         }
     }
 }

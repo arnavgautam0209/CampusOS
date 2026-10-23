@@ -61,7 +61,7 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - Only staff can approve or revoke, never their own record. Each decision records who made it and when. Use the API or the Django admin actions.
 - `seed_demo` creates four certifications and makes **Electronics Lab** require *Basic Electronics Safety*. It never grants certifications.
 - Equipment requirements are stored and shown in the API but not enforced yet (no equipment checkout exists).
-- Demo: as `demo_student`, booking Electronics Lab is refused. Approve the request in `/admin/` (Skillpass → User certifications → *Approve selected*) and try again.
+- Demo: as `demo_student`, open Electronics Lab in the app. Booking is refused. Tap **Request Training** (on the lab or the SkillPass screen), approve it in `/admin/` (Skillpass → User certifications → *Approve selected*), pull to refresh SkillPass, and book again.
 
 ## Layout
 ```

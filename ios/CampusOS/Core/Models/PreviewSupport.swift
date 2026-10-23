@@ -15,6 +15,19 @@ struct PreviewBookingService: BookingService {
     }
 }
 
+struct PreviewSkillPassService: SkillPassService {
+    func fetchCatalog() async throws -> [Certification] {
+        [Certification(id: "CERT-ELEC-BASIC", name: "Basic Electronics Safety",
+                       description: "Safe use of bench power supplies and test equipment.", validityDays: 365)]
+    }
+
+    func fetchMyRecords() async throws -> [CertificationRecord] { [] }
+
+    func requestCertification(id: String) async throws -> CertificationRecord {
+        throw APIError.notFound("Not available in previews.")
+    }
+}
+
 extension View {
     @MainActor
     func previewEnvironment() -> some View {
@@ -22,6 +35,7 @@ extension View {
         return environmentObject(AuthManager(api: api))
             .environmentObject(LabStore(fetchLabs: { DemoLabs.all }))
             .environmentObject(BookingStore(service: PreviewBookingService()))
+            .environmentObject(SkillPassStore(service: PreviewSkillPassService()))
     }
 }
 #endif
