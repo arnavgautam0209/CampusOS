@@ -3,6 +3,9 @@ import SwiftUI
 /// Faculty dashboard: open sessions, the live scan feed and reader status.
 struct LiveAttendanceView: View {
     @EnvironmentObject private var store: AttendanceStore
+    @State private var showingOpenSession = false
+    @State private var sessionToClose: LiveSession?
+    @State private var actionError: String?
 
     var body: some View {
         Group {
@@ -22,6 +25,53 @@ struct LiveAttendanceView: View {
             }
         }
         .task { await store.poll(staff: true) }
+        .sheet(isPresented: $showingOpenSession) {
+            NavigationStack { OpenSessionView(classrooms: store.classroomsAvailableToOpen) }
+        }
+        .confirmationDialog(
+            "Close \(sessionToClose?.title ?? "session")?",
+            isPresented: Binding(get: { sessionToClose != nil }, set: { if !$0 { sessionToClose = nil } }),
+            titleVisibility: .visible,
+            presenting: sessionToClose
+        ) { session in
+            Button("Close Session", role: .destructive) { Task { await close(session) } }
+        } message: { session in
+            Text("Readers in \(session.classroomName) will stop marking attendance. \(session.records.count) present will be kept.")
+        }
+        .alert("Couldn't Update Session", isPresented: Binding(
+            get: { actionError != nil }, set: { if !$0 { actionError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "")
+        }
+    }
+
+    private func close(_ session: LiveSession) async {
+        do {
+            try await store.closeSession(session)
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private var openSessionButton: some View {
+        let rooms = store.classroomsAvailableToOpen
+        return VStack(alignment: .leading, spacing: 4) {
+            Button {
+                showingOpenSession = true
+            } label: {
+                Label("Open Session…", systemImage: "plus.circle.fill")
+            }
+            .disabled(rooms.isEmpty || store.isChangingSession)
+            if rooms.isEmpty, store.live?.classrooms.isEmpty == false {
+                Text("Every classroom already has an open session.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if store.live?.classrooms.isEmpty == true {
+                Text("No classrooms are set up yet. Add one in the admin site.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func dashboard(_ live: AttendanceLive) -> some View {
@@ -30,11 +80,12 @@ struct LiveAttendanceView: View {
                 LiveStatusRow(lastUpdated: store.lastUpdated, errorMessage: store.loadState.errorMessage)
             }
 
-            if live.openSessions.isEmpty {
-                Section("Open Sessions") {
-                    Text("No attendance session is open. Open one in the admin site under Attendance → Attendance sessions.")
+            Section("Open Sessions") {
+                if live.openSessions.isEmpty {
+                    Text("No attendance session is open, so readers won't mark anyone present.")
                         .foregroundStyle(.secondary)
                 }
+                openSessionButton
             }
             ForEach(live.openSessions) { session in
                 Section {
@@ -44,6 +95,12 @@ struct LiveAttendanceView: View {
                     ForEach(session.records) { attendee in
                         AttendeeRow(attendee: attendee)
                     }
+                    Button(role: .destructive) {
+                        sessionToClose = session
+                    } label: {
+                        Label("Close Session", systemImage: "stop.circle")
+                    }
+                    .disabled(store.isChangingSession)
                 } header: {
                     SessionHeader(session: session)
                 }

@@ -12,6 +12,8 @@ final class AttendanceStore: ObservableObject {
     /// Items that arrived in the latest refresh, so the UI can highlight them.
     @Published private(set) var newScanIDs: Set<Int> = []
     @Published private(set) var newRecordIDs: Set<Int> = []
+    /// True while an open/close request is in flight, to disable the buttons.
+    @Published private(set) var isChangingSession = false
 
     nonisolated static let pollInterval: Duration = .seconds(3)
 
@@ -51,6 +53,27 @@ final class AttendanceStore: ObservableObject {
         } catch {
             loadState = .failed(error.localizedDescription)
         }
+    }
+
+    /// Rooms without an open session, for the Open Session picker.
+    var classroomsAvailableToOpen: [LiveClassroom] {
+        live?.classrooms.filter { !$0.hasOpenSession } ?? []
+    }
+
+    /// Faculty only (enforced by the server). Refreshes so the new session shows at once.
+    func openSession(classroomId: String, title: String) async throws {
+        isChangingSession = true
+        defer { isChangingSession = false }
+        _ = try await service.openSession(classroomId: classroomId,
+                                          title: title.trimmingCharacters(in: .whitespacesAndNewlines))
+        await refreshLive()
+    }
+
+    func closeSession(_ session: LiveSession) async throws {
+        isChangingSession = true
+        defer { isChangingSession = false }
+        _ = try await service.closeSession(id: session.id)
+        await refreshLive()
     }
 
     /// Refreshes until the calling task is cancelled (SwiftUI cancels `.task` when the screen closes).

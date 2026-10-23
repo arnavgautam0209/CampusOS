@@ -34,6 +34,14 @@ struct PreviewAttendanceService: AttendanceService {
     }
 
     func fetchMine() async throws -> [MyAttendance] { [] }
+
+    func openSession(classroomId: String, title: String) async throws -> LiveSession {
+        throw APIError.notFound("Not available in previews.")
+    }
+
+    func closeSession(id: Int) async throws -> LiveSession {
+        throw APIError.notFound("Not available in previews.")
+    }
 }
 
 extension View {

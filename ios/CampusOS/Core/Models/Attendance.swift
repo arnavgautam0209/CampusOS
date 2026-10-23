@@ -6,6 +6,26 @@ struct AttendanceLive: Codable, Equatable {
     let openSessions: [LiveSession]
     let readers: [CardReader]
     let recentScans: [ReaderScan]
+    /// Rooms faculty can open a session in. Empty from servers older than this field.
+    var classrooms: [LiveClassroom] = []
+}
+
+extension AttendanceLive {
+    // In an extension so the memberwise initializer is kept.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        openSessions = try container.decode([LiveSession].self, forKey: .openSessions)
+        readers = try container.decode([CardReader].self, forKey: .readers)
+        recentScans = try container.decode([ReaderScan].self, forKey: .recentScans)
+        classrooms = try container.decodeIfPresent([LiveClassroom].self, forKey: .classrooms) ?? []
+    }
+}
+
+struct LiveClassroom: Codable, Identifiable, Equatable {
+    let id: String
+    let name: String
+    let hasOpenSession: Bool
 }
 
 struct LiveSession: Codable, Identifiable, Equatable {
@@ -15,6 +35,7 @@ struct LiveSession: Codable, Identifiable, Equatable {
     let classroomName: String
     let openedBy: String?
     let openedAt: Date
+    let closedAt: Date?
     let records: [SessionAttendee]
 }
 

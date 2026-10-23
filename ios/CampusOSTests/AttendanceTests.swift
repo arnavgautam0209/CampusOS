@@ -5,8 +5,11 @@ import Testing
 final class FakeAttendanceService: AttendanceService {
     var liveResponses: [Result<AttendanceLive, Error>] = []
     var mineResponses: [Result<[MyAttendance], Error>] = []
+    var sessionResult: Result<LiveSession, Error> = .failure(APIError.badResponse)
     private(set) var liveFetches = 0
     private(set) var mineFetches = 0
+    private(set) var opened: [(classroomId: String, title: String)] = []
+    private(set) var closedIDs: [Int] = []
 
     func fetchLive() async throws -> AttendanceLive {
         liveFetches += 1
@@ -17,6 +20,16 @@ final class FakeAttendanceService: AttendanceService {
         mineFetches += 1
         return try (mineResponses.count > 1 ? mineResponses.removeFirst() : mineResponses[0]).get()
     }
+
+    func openSession(classroomId: String, title: String) async throws -> LiveSession {
+        opened.append((classroomId, title))
+        return try sessionResult.get()
+    }
+
+    func closeSession(id: Int) async throws -> LiveSession {
+        closedIDs.append(id)
+        return try sessionResult.get()
+    }
 }
 
 private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
@@ -26,8 +39,14 @@ private func scan(_ id: Int, _ result: ScanResult = .marked, student: String? = 
                classroomId: "ROOM-101", createdAt: t0.addingTimeInterval(Double(id)))
 }
 
-private func live(scans: [ReaderScan]) -> AttendanceLive {
-    AttendanceLive(generatedAt: t0, openSessions: [], readers: [], recentScans: scans)
+private func live(scans: [ReaderScan], sessions: [LiveSession] = [],
+                  classrooms: [LiveClassroom] = []) -> AttendanceLive {
+    AttendanceLive(generatedAt: t0, openSessions: sessions, readers: [], recentScans: scans, classrooms: classrooms)
+}
+
+private func liveSession(_ id: Int, room: String = "ROOM-101") -> LiveSession {
+    LiveSession(id: id, title: "Lecture \(id)", classroomId: room, classroomName: room, openedBy: "Priya Nair",
+                openedAt: t0, closedAt: nil, records: [])
 }
 
 private func mine(_ id: Int) -> MyAttendance {
@@ -133,6 +152,56 @@ struct AttendanceStoreTests {
         #expect(service.mineFetches == fetchesAtStop)
     }
 
+    @Test func openSessionSendsTrimmedTitleAndRefreshes() async throws {
+        service.liveResponses = [
+            .success(live(scans: [], classrooms: [LiveClassroom(id: "ROOM-101", name: "Room 101", hasOpenSession: false)])),
+            .success(live(scans: [], sessions: [liveSession(5)],
+                          classrooms: [LiveClassroom(id: "ROOM-101", name: "Room 101", hasOpenSession: true)])),
+        ]
+        service.sessionResult = .success(liveSession(5))
+        let store = makeStore()
+        await store.refreshLive()
+        #expect(store.classroomsAvailableToOpen.map(\.id) == ["ROOM-101"])
+
+        try await store.openSession(classroomId: "ROOM-101", title: "  CS201 Lecture 6 \n")
+
+        #expect(service.opened.map(\.title) == ["CS201 Lecture 6"])
+        #expect(service.opened.map(\.classroomId) == ["ROOM-101"])
+        #expect(service.liveFetches == 2)
+        #expect(store.live?.openSessions.map(\.id) == [5])
+        #expect(store.classroomsAvailableToOpen.isEmpty)
+        #expect(!store.isChangingSession)
+    }
+
+    @Test func failedOpenSurfacesServerMessageWithoutRefreshing() async {
+        service.liveResponses = [.success(live(scans: []))]
+        service.sessionResult = .failure(APIError.conflict("Room 101 already has an open session: Lecture 5."))
+        let store = makeStore()
+        await store.refreshLive()
+
+        await #expect(throws: APIError.conflict("Room 101 already has an open session: Lecture 5.")) {
+            try await store.openSession(classroomId: "ROOM-101", title: "Lecture 6")
+        }
+        #expect(service.liveFetches == 1)
+        #expect(!store.isChangingSession)
+    }
+
+    @Test func closeSessionCallsServerAndRefreshes() async throws {
+        service.liveResponses = [.success(live(scans: [], sessions: [liveSession(5)])), .success(live(scans: []))]
+        service.sessionResult = .success(liveSession(5))
+        let store = makeStore()
+        await store.refreshLive()
+
+        try await store.closeSession(try #require(store.live?.openSessions.first))
+
+        #expect(service.closedIDs == [5])
+        #expect(store.live?.openSessions.isEmpty == true)
+    }
+
+    @Test func noClassroomsAvailableBeforeFirstLoad() {
+        #expect(makeStore().classroomsAvailableToOpen.isEmpty)
+    }
+
     @Test func resetClearsEverything() async {
         service.liveResponses = [.success(live(scans: [scan(1)]))]
         let store = makeStore()
@@ -173,6 +242,27 @@ struct AttendanceDecodingTests {
         #expect(live.readers.first?.hasKey == true)
         #expect(live.recentScans.map(\.result) == [.unknownCard, .marked])
         #expect(live.recentScans.first?.student == nil)
+    }
+
+    @Test func classroomsDecodeAndAreOptionalForOlderServers() throws {
+        let current = """
+        {"generatedAt":"2026-10-24T09:01:30+00:00","openSessions":[],"readers":[],"recentScans":[],
+         "classrooms":[{"id":"ROOM-101","name":"Lecture Room 101, Block A","hasOpenSession":true}]}
+        """
+        let older = #"{"generatedAt":"2026-10-24T09:01:30+00:00","openSessions":[],"readers":[],"recentScans":[]}"#
+        let decoded = try JSONDecoder.campusOS.decode(AttendanceLive.self, from: Data(current.utf8))
+        #expect(decoded.classrooms.first?.hasOpenSession == true)
+        #expect(try JSONDecoder.campusOS.decode(AttendanceLive.self, from: Data(older.utf8)).classrooms.isEmpty)
+    }
+
+    @Test func closedSessionDecodesClosedAt() throws {
+        let json = """
+        {"id":5,"title":"Lecture 5","classroomId":"ROOM-101","classroomName":"Room 101","openedBy":null,
+         "openedAt":"2026-10-24T09:00:00+00:00","closedAt":"2026-10-24T10:00:00.5+00:00","records":[]}
+        """
+        let session = try JSONDecoder.campusOS.decode(LiveSession.self, from: Data(json.utf8))
+        #expect(session.closedAt != nil)
+        #expect(session.openedBy == nil)
     }
 
     @Test func unknownScanResultDecodesAsOther() throws {
