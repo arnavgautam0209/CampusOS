@@ -44,6 +44,7 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | GET | `/api/v1/attendance/mine/` | token | Your attendance records, newest first |
 | POST | `/api/v1/attendance/sessions/` | staff | `{classroomId, title}` opens a session (409 if the room already has one) |
 | POST | `/api/v1/attendance/sessions/{id}/close/` | staff | Close a session; readers in that room stop marking |
+| POST | `/api/v1/ai/planner/` | token | `{prompt}` returns recommended labs, free slots, SkillPass status, missing items and next steps (rate-limited per user) |
 | GET | `/api/v1/certifications/` | public | SkillPass catalogue |
 | GET | `/api/v1/certifications/mine/` | token | Your certification records (`status`, `isValid`, `expiresAt`) |
 | POST | `/api/v1/certifications/{id}/request/` | token | Ask faculty to certify you (creates a pending record) |
@@ -75,6 +76,12 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - Faculty can add attendance by hand in a session's admin page; those rows are marked `manual`.
 - Limitation: a UID isn't identity proof, and enrolment isn't checked yet. See firmware/README.md.
 
+## AI Mission Planner
+- **Claude only interprets the student's text** (`planner/extraction.py`): it extracts team size, date, time, duration and items. Items can only be matched to real equipment IDs (a JSON schema with an `enum` of catalogue IDs), and the server re-validates everything it returns.
+- **Everything else is deterministic** (`planner/engine.py`): labs, equipment availability, capacity, SkillPass status, free slots from real bookings (09:00 to 18:00, 30-minute steps), missing items and next steps. The planner never books or certifies: students act through the normal checked endpoints.
+- **Setup:** set `ANTHROPIC_API_KEY` in your environment or `backend/.env`, never in Git. Without it, or if Claude is unreachable, rate-limited or declines, the planner uses keyword matching and the response says so (`engine: "keywords"` plus a note). Set `CAMPUSOS_PLANNER_ENGINE=keywords` to never call Claude. Requests are limited to `CAMPUSOS_PLANNER_RATE` per user (default 30/hour).
+- **Model:** Claude Opus 5.5 (`claude-opus-5-5`) at low effort, with structured JSON output and server-side refusal fallback. The student's description is sent to Anthropic's API.
+
 ## Layout
 ```
 config/     settings (env-driven), root URLs, /api/v1/ routing
@@ -84,7 +91,8 @@ bookings/   Booking model, booking rules (services.py), API
 skillpass/  certifications, approval workflow, access checks
 attendance/ classrooms, campus cards, attendance sessions and records
 devices/    readers, device-key auth, /devices/scan/, scan log, device_key command
+planner/    AI Mission Planner: Claude extraction with keyword fallback, deterministic plan engine
 ```
 
 ## Not yet built
-Real roles and permissions, server-side sign-out (token revocation), equipment checkout (to enforce equipment certifications), telemetry, course enrolment checks, the full ProxyGuard verification flow, AI planner, PostgreSQL configuration.
+Real roles and permissions, server-side sign-out (token revocation), equipment checkout (to enforce equipment certifications), telemetry, course enrolment checks, the full ProxyGuard verification flow, inventory quantities (the planner can't check stock counts yet), PostgreSQL configuration.
