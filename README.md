@@ -37,8 +37,9 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 **Backend**
 - `/api/v1/` health, token auth + `/auth/me/`, labs (read-only), bookings (create/list/cancel) with server-side conflict checks and tests
+- SkillPass: certifications with faculty approval, expiry and revocation; restricted labs refuse bookings (403) without the required certification
 
-**Not yet built:** roles and SkillPass rules on the server, NFC/ESP32 events, sensor telemetry, attendance, AI planning.
+**Not yet built:** real roles, the iOS SkillPass screen (still sample data), NFC/ESP32 events, sensor telemetry, attendance, AI planning.
 
 ## Ground rules
 - The backend is the source of truth. Anything shown from local demo data is labelled as demo data.
