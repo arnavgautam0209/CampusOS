@@ -58,10 +58,17 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/telemetry/` | device key (sensor in a lab) | `{temperature_c, humidity_pct, gas_raw}` from a SafeLab sensor node; see firmware/README.md |
 | GET | `/api/v1/safelab/` | token | Per-lab status (normal/warning/danger/offline), latest reading, last 40 readings, open alerts, thresholds |
 | POST | `/api/v1/safelab/alerts/{id}/acknowledge/` | staff | Acknowledge a safety alert |
-| GET | `/api/v1/spaces/?date=YYYY-MM-DD` | token | Rooms (kind, capacity, location, features, bookable, free/class now) with busy slots 08:00-20:00 |
-| GET/POST | `/api/v1/spaces/bookings/` | token | Your room bookings / `{roomId, start, durationMinutes, attendees, purpose}` (409 overlap, 403 timetabled room, 400 capacity) |
+| GET | `/api/v1/spaces/?date=YYYY-MM-DD` | token | Rooms (kind, capacity, location, features, bookable, free/class now) with busy slots and timetabled `lectures` 08:00-20:00 |
+| GET | `/api/v1/spaces/availability/?date=&start=HH:MM&duration=60&group_size=8&mode=shared` | token | Rooms that fit the group for the whole time, best fit first: `recommended`, `rooms`, `unavailable` (with `reason`), `message`, active `timetable` |
+| GET/POST | `/api/v1/spaces/bookings/` (also `bookings/mine/`) | token | Your room bookings / `{roomId, start, durationMinutes, attendees, purpose, mode}`; `mode` is `shared` or `exclusive` (default). 409 no seats/overlap/class, 403 timetabled room, 400 capacity |
 | POST | `/api/v1/spaces/bookings/{id}/cancel/`, `/check-in/` | token | Cancel (booker or staff); check in from 10 min before to 15 min after the start |
 | GET | `/api/v1/spaces/utilization/?days=7` | staff | Per-room bookings, booked hours, no-shows, utilization % |
+| GET | `/api/v1/spaces/timetables/active/` | token | The active timetable with its weekly classes (404 if none) |
+| GET | `/api/v1/spaces/timetables/`, `{id}/`, `history/` | staff | Versions, one version with its classes, audit log |
+| POST | `/api/v1/spaces/timetables/upload/` | staff | `{name, filename, csv}` or multipart `file`: validated draft with `preview` and `conflicts` (400 lists bad rows) |
+| GET | `/api/v1/spaces/timetables/{id}/preview/`, `conflicts/` | staff | Rooms that become occupied/freed vs the active one; upcoming bookings that clash, with a suggested room |
+| POST | `/api/v1/spaces/timetables/{id}/resolve/` | staff | `{bookingId, action: reassign\|cancel, roomId?}` for a clashing booking (logged, shown to the student) |
+| POST | `/api/v1/spaces/timetables/{id}/activate/` | staff | Replace the active timetable (409 while bookings clash); the old one is archived and can be re-activated |
 | GET | `/api/v1/certifications/` | public | SkillPass catalogue |
 | GET | `/api/v1/certifications/mine/` | token | Your certification records (`status`, `isValid`, `expiresAt`) |
 | POST | `/api/v1/certifications/{id}/request/` | token | Ask faculty to certify you (creates a pending record) |
@@ -133,6 +140,23 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - Availability shows only *that* a slot is booked to students; staff also see who. A room with an open attendance session shows "Class now".
 - Not yet: card-tap check-in for rooms (would change the classroom reader contract), PIR occupancy sensing (PIR detects movement, not verified occupancy).
 
+## SpacePulse classrooms, timetables and seats (Demo University Mode)
+- `manage.py seed_spacepulse_demo` adds six **fictional** classrooms (ECE-101 30, ECE-102 45, IT-201 60, CSE-301 75, SEM-01 100, HALL-01 150 seats) and loads `demo_data/spacepulse/Timetable_A_Initial.csv` as v1. It's safe to rerun: existing rooms aren't changed, A is loaded once, and it's activated only if no timetable is active, so an uploaded one is never replaced. `Timetable_B_Updated.csv` is for the live upload; the CSV format is in [demo_data/spacepulse/README.md](demo_data/spacepulse/README.md).
+- **Timetables** (`spaces/timetables.py`): weekly classes per room. One version is active; activating another archives it (kept for rollback). A class blocks the whole room for everyone. Uploads are all-or-nothing: any bad row (day, time, unknown room, overlap in the same room) rejects the file with line numbers.
+- **Conflicts:** activation is refused (409) while an upcoming booking would overlap a class in the new timetable. Faculty move the booking to another room that's free under both timetables (the best fit is suggested) or cancel it. Each decision is logged (`TimetableEvent`) and shown to the student on the booking (`note`). Nothing is changed silently.
+- **Seats** (`spaces/capacity.py`): a room's capacity never changes. *Shared* bookings take the group's seats; free seats over a time range = capacity − the busiest moment of overlapping shared bookings (a sweep over start/end times, so 11:15–12:15 is checked against 11:30–12:00 too). A class or an *exclusive* booking makes free seats 0. Cancelled and expired bookings don't count.
+- **Recommendation:** rooms with enough free seats for the whole range, sorted by seats left empty after the group sits down (then smaller room). Deterministic; no AI.
+- **Concurrency:** each booking takes a lock before reading seats. PostgreSQL locks the room row (`SELECT … FOR UPDATE`). SQLite ignores that, so a no-op `UPDATE` on the room takes SQLite's database-wide write lock first and a second booking waits for the first to commit. This is fine for a demo; use PostgreSQL for many simultaneous users (SQLite allows one writer at a time and waits up to 5 s).
+- **Limits:** timetables repeat weekly (no holidays or one-off exams); times are campus local time (`DJANGO_TIME_ZONE`). The 15-minute no-show release also applies to shared bookings.
+
+### Demo script
+1. `manage.py migrate && manage.py seed_spacepulse_demo`, then run the server.
+2. **Student** (`demo_student`): SpacePulse → **Find Best Room**: group 8, next **Monday 11:00**, 1 h, Shared Study → ECE-101 is recommended ("22 seats would remain available"; IT-201 shows "Timetabled: Python Programming"). **Confirm Booking**.
+3. For **8 of 60 → 52**: Monday **14:00**, group 8 → book **IT-201** from Other Rooms That Fit; search again: IT-201 shows 52 of 60 free.
+4. **Faculty** (`demo_faculty`): SpacePulse → **Manage Timetables** → **Upload Timetable (CSV)** → `Timetable_B_Updated.csv` (AirDrop it or put it in Files / iCloud Drive; in the Simulator drag the file onto the window first). The review shows ECE-101 and CSE-301 becoming occupied on Monday 11:00, ECE-102 freed on Monday 15:00, and 1 conflict: the student's ECE-101 booking. **Activate** is blocked until you tap **Move to ECE-102** (or Cancel Booking). Then **Activate Timetable**.
+5. **Student** again: Find Best Room for Monday 11:00 → ECE-102 is recommended, ECE-101 shows "Timetabled: Microcontrollers"; the booking shows "Moved from ECE-101 to ECE-102 by Demo Faculty…".
+6. To reset for another run: in Manage Timetables open **v1 Timetable A** → **Re-activate This Version** (cancel the student's Monday bookings first if they clash).
+
 ## Layout
 ```
 config/     settings (env-driven), root URLs, /api/v1/ routing
@@ -144,7 +168,7 @@ attendance/ classrooms, campus cards, enrollments, attendance sessions and recor
 devices/    readers, device-key auth, /devices/scan/, scan log, device_key command
 inventory/  AssetX stock, loans, returns and damage reports
 safelab/    sensor telemetry, safety alerts, simulate_reading command
-spaces/     SpacePulse room bookings, check-in, no-shows, utilization
+spaces/     SpacePulse room bookings, shared seats (capacity.py), timetables (timetables.py), check-in, no-shows, utilization
 planner/    AI Mission Planner: Claude extraction with keyword fallback, deterministic plan engine
 ```
 
