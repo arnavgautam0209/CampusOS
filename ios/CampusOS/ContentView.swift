@@ -7,6 +7,7 @@ struct ContentView: View {
     @EnvironmentObject private var attendance: AttendanceStore
     @EnvironmentObject private var planner: PlannerStore
     @EnvironmentObject private var inventory: InventoryStore
+    @EnvironmentObject private var safeLab: SafeLabStore
 
     var body: some View {
         TabView {
@@ -30,6 +31,7 @@ struct ContentView: View {
                 attendance.reset()
                 planner.reset()
                 inventory.reset()
+                safeLab.reset()
             }
         }
     }

@@ -62,6 +62,20 @@ final class WalkthroughUITests: XCTestCase {
         shot("skillpass")
         back()
 
+        // AssetX
+        openCard("AssetX")
+        waitFor("Borrowed by You", timeout: 15)
+        shot("assetx")
+        app.swipeUp()
+        shot("assetx-inventory")
+        back()
+
+        // SafeLab
+        openCard("SafeLab")
+        waitFor("AI & Computing Lab", timeout: 15)
+        shot("safelab")
+        back()
+
         // Bookings tab
         tab("Bookings")
         waitFor("AI & Computing Lab")

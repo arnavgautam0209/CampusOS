@@ -47,18 +47,20 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - SkillPass (**live backend data**): your certifications with status and expiry, available training with a **Request Training** / **Request Renewal** button; lab details list required certifications with your standing, and equipment shows its own requirements
 - ProxyGuard (**live backend data**): faculty open and close sessions, and see who's present, a live feed of reader taps (new taps highlighted) and reader status. Students see their own attendance. Both refresh every 3 s while open
 - AssetX (**live backend data**): equipment by lab with available/total units, low-stock, lab-use-only and maintenance badges; borrow with quantity and loan length, return as OK/damaged/missing; faculty see everything out on loan and damage reports
-- SafeLab still shows **sample data** (labelled as such); SpacePulse is a placeholder
+- SafeLab (**live sensor data**): per-lab status, temperature/humidity/gas tiles, trend charts with warning and danger lines, open alerts that faculty acknowledge, offline and simulated labels; refreshes every 5 s
+- SpacePulse is a placeholder
 - AI Mission Planner (**live**): describe a project and get recommended labs, free time slots you can book in one tap, SkillPass requirements with Request Training buttons, missing items and next steps. Claude interprets the text; every fact comes from CampusOS data. Without an API key it falls back to keyword matching
 - Unit tests for `BookingStore`, `SkillPassStore`, `AttendanceStore`, `PlannerStore`, `APIClient`, sign-in, server address parsing, date parsing and Keychain storage
 
 **Backend**
 - `/api/v1/` health, token auth + `/auth/me/`, labs (read-only), bookings (create/list/cancel) with server-side conflict checks and tests
+- SafeLab: ESP32 sensor nodes POST DHT22/MQ-2 readings to `/api/v1/telemetry/`; alerts open on demo thresholds and stay until faculty acknowledge
 - AI planner: `/api/v1/ai/planner/` (Claude Opus 5.5 extraction + deterministic matching; set `ANTHROPIC_API_KEY` to enable Claude)
 - SkillPass: certifications with faculty approval, expiry and revocation; restricted labs refuse bookings (403) without the required certification
 - Lab check-in: lab door readers validate the student's booking and SkillPass certifications, answer granted/denied, and record the actual session start
 - Attendance: ESP32 readers POST card taps to `/api/v1/devices/scan/` with a device key. Attendance is marked only while faculty have a session open in that room, with duplicate protection and a log of every scan
 
-**Not yet built:** real roles, sensor telemetry, the full ProxyGuard verification flow, SpacePulse rooms.
+**Not yet built:** real roles, push notifications, the full ProxyGuard verification flow, SpacePulse rooms.
 
 ## Ground rules
 - The backend is the source of truth. Anything shown from local demo data is labelled as demo data.

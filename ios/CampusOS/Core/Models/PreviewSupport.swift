@@ -74,6 +74,15 @@ struct PreviewInventoryService: InventoryService {
     }
 }
 
+struct PreviewSafeLabService: SafeLabService {
+    func fetchDashboard() async throws -> SafetyDashboard {
+        SafetyDashboard(generatedAt: Date(), labs: [],
+                        thresholds: SafetyThresholds(temperatureC: [:], humidityPct: [:], gasRaw: [:]))
+    }
+
+    func acknowledge(alertID: Int) async throws {}
+}
+
 extension View {
     @MainActor
     func previewEnvironment() -> some View {
@@ -85,6 +94,7 @@ extension View {
             .environmentObject(AttendanceStore(service: PreviewAttendanceService()))
             .environmentObject(PlannerStore(service: PreviewPlannerService()))
             .environmentObject(InventoryStore(service: PreviewInventoryService()))
+            .environmentObject(SafeLabStore(service: PreviewSafeLabService()))
     }
 }
 #endif
