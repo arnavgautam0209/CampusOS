@@ -76,6 +76,15 @@ EQUIPMENT_REQUIREMENTS = {
 
 # Attendance demo: one classroom with one reader. Keys come from `manage.py device_key`.
 DEMO_CLASSROOMS = [("ROOM-101", "Lecture Room 101, Block A"), ("ECE", "ECE Classroom")]
+# SpacePulse room details: (kind, capacity, location, features, students may book).
+ROOM_DETAILS = {
+    "ROOM-101": ("classroom", 60, "Block A · 101", "Projector, Microphone", False),
+    "ECE": ("classroom", 40, "Block B · ECE wing", "Projector", False),
+    "STUDY-A1": ("study_room", 6, "Library · Level 1", "Whiteboard, TV screen", True),
+    "STUDY-A2": ("study_room", 4, "Library · Level 1", "Whiteboard", True),
+    "MEET-B2": ("meeting_room", 10, "Block B · 204", "Projector, Video call", True),
+}
+EXTRA_ROOMS = [("STUDY-A1", "Study Room A1"), ("STUDY-A2", "Study Room A2"), ("MEET-B2", "Meeting Room B2")]
 DEMO_DEVICES = [("READER-ROOM-101", "Room 101 card reader", "ROOM-101"),
                 ("READER-ECE", "ECE classroom reader (AttendX ESP32-S3)", "ECE")]
 # Lab door readers check students in to their booking.
@@ -117,8 +126,11 @@ class Command(BaseCommand):
                 total_quantity=total, low_stock_threshold=low, is_loanable=loanable)
         for equipment_id, cert_ids in EQUIPMENT_REQUIREMENTS.items():
             Equipment.objects.get(pk=equipment_id).required_certifications.set(cert_ids)
-        for classroom_id, name in DEMO_CLASSROOMS:
-            Classroom.objects.update_or_create(id=classroom_id, defaults={"name": name})
+        for room_id, name in DEMO_CLASSROOMS + EXTRA_ROOMS:
+            kind, capacity, location, features, bookable = ROOM_DETAILS[room_id]
+            Classroom.objects.update_or_create(id=room_id, defaults={
+                "name": name, "kind": kind, "capacity": capacity, "location": location,
+                "features": features, "is_bookable": bookable})
         for device_id, name, classroom_id in DEMO_DEVICES:
             Device.objects.update_or_create(id=device_id, defaults={"name": name, "classroom_id": classroom_id})
         for device_id, name, lab_id in DEMO_LAB_READERS:
@@ -126,7 +138,7 @@ class Command(BaseCommand):
         if options["verbosity"]:
             self.stdout.write(self.style.SUCCESS(
                 f"Seeded {len(DEMO_LABS)} demo labs, {len(DEMO_CERTIFICATIONS)} certifications, "
-                f"{len(DEMO_CLASSROOMS)} classrooms, {len(DEMO_DEVICES)} classroom readers and "
+                f"{len(DEMO_CLASSROOMS) + len(EXTRA_ROOMS)} rooms, {len(DEMO_DEVICES)} classroom readers and "
                 f"{len(DEMO_LAB_READERS)} lab reader."))
             for device_id, *_ in DEMO_DEVICES + DEMO_LAB_READERS:
                 if not Device.objects.filter(id=device_id).exclude(key_hash="").exists():

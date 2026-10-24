@@ -24,6 +24,7 @@ from devices.models import Device
 from inventory.services import checkout
 from safelab.models import SensorReading
 from safelab.services import record as record_reading
+from spaces.services import book_room
 from skillpass.models import UserCertification
 
 PREFIX = "demo_ui_"
@@ -120,6 +121,15 @@ class Command(BaseCommand):
             checkout(student, "EQ008", quantity=2, days=3)
         except APIException:
             self.stdout.write("Not enough Arduino boards in stock, so the demo skips the loan.")
+        # SpacePulse: a study-room booking later today (or tomorrow morning if it's late).
+        now = timezone.localtime()
+        later = (now + timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
+        if later.hour >= 19:
+            later = timezone.make_aware(datetime.combine(now.date() + timedelta(days=1), time(10, 0)))
+        try:
+            book_room(student, "STUDY-A1", later, 90, attendees=4, purpose="Line-follower robot planning")
+        except APIException:
+            self.stdout.write("Study Room A1 is taken then, so the demo skips the room booking.")
         sensor = Device.objects.create(id=SENSOR_ID, name="Demo lab sensor node", lab_id=SENSOR_LAB)
         for temperature, humidity, gas in SENSOR_READINGS:
             record_reading(sensor, {"temperature_c": temperature, "humidity_pct": humidity, "gas_raw": gas},

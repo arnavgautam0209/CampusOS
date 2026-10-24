@@ -13,6 +13,7 @@ from bookings.models import Booking
 from devices.models import Device
 from inventory.models import EquipmentLoan
 from safelab.models import SensorReading
+from spaces.models import RoomBooking
 
 from .models import Lab
 
@@ -74,6 +75,7 @@ class WalkthroughSeedTests(TestCase):
         self.assertEqual(checked_in.checked_in_device_id, "READER-DEMO-LAB")
         self.assertEqual(SensorReading.objects.filter(device_id="SENSOR-DEMO").count(), 7)
         self.assertTrue(EquipmentLoan.objects.filter(user__username="demo_ui_student").exists())
+        self.assertTrue(RoomBooking.objects.filter(user__username="demo_ui_student").exists())
 
         call_command("seed_walkthrough", "--clean", stdout=StringIO())
         self.assertFalse(get_user_model().objects.filter(username__startswith="demo_ui_").exists())
@@ -81,6 +83,7 @@ class WalkthroughSeedTests(TestCase):
         self.assertFalse(Device.objects.filter(pk__in=["READER-DEMO", "READER-DEMO-LAB", "SENSOR-DEMO"]).exists())
         self.assertFalse(SensorReading.objects.exists())
         self.assertFalse(EquipmentLoan.objects.exists())
+        self.assertFalse(RoomBooking.objects.exists())
         self.assertTrue(Device.objects.filter(pk="READER-LAB001").exists())  # real readers kept
         self.assertTrue(Lab.objects.exists())  # real catalogue kept
 

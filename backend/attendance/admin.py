@@ -7,7 +7,8 @@ from .models import AttendanceRecord, AttendanceSession, CampusCard, Classroom
 
 @admin.register(Classroom)
 class ClassroomAdmin(admin.ModelAdmin):
-    list_display = ["id", "name"]
+    list_display = ["id", "name", "kind", "capacity", "location", "is_bookable"]
+    list_filter = ["kind", "is_bookable"]
 
 
 @admin.register(CampusCard)

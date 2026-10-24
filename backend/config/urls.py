@@ -24,6 +24,7 @@ api_v1 = [
     path("", include("planner.urls")),
     path("", include("inventory.urls")),
     path("", include("safelab.urls")),
+    path("", include("spaces.urls")),
 ]
 
 urlpatterns = [

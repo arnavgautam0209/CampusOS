@@ -9,11 +9,26 @@ uid_validator = RegexValidator(UID_PATTERN, "Use 4, 7 or 10 bytes of uppercase h
 
 
 class Classroom(models.Model):
+    """A campus room. Attendance uses it as a classroom; SpacePulse books it."""
+
+    class Kind(models.TextChoices):
+        CLASSROOM = "classroom", "Classroom"
+        STUDY_ROOM = "study_room", "Study room"
+        MEETING_ROOM = "meeting_room", "Meeting room"
+
     id = models.CharField(primary_key=True, max_length=32)
     name = models.CharField(max_length=120)
+    # SpacePulse
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.CLASSROOM)
+    capacity = models.PositiveIntegerField(default=30)
+    location = models.CharField(max_length=120, blank=True)
+    features = models.CharField(max_length=200, blank=True, help_text="Comma-separated, e.g. Whiteboard, Projector")
+    is_bookable = models.BooleanField(
+        default=False, help_text="Students may book it. Timetabled classrooms usually aren't; staff can book any room.")
 
     class Meta:
         ordering = ["id"]
+        verbose_name = "room"
 
     def __str__(self):
         return f"{self.name} ({self.id})"

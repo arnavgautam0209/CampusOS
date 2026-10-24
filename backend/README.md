@@ -53,6 +53,10 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/telemetry/` | device key (sensor in a lab) | `{temperature_c, humidity_pct, gas_raw}` from a SafeLab sensor node; see firmware/README.md |
 | GET | `/api/v1/safelab/` | token | Per-lab status (normal/warning/danger/offline), latest reading, last 40 readings, open alerts, thresholds |
 | POST | `/api/v1/safelab/alerts/{id}/acknowledge/` | staff | Acknowledge a safety alert |
+| GET | `/api/v1/spaces/?date=YYYY-MM-DD` | token | Rooms (kind, capacity, location, features, bookable, free/class now) with busy slots 08:00-20:00 |
+| GET/POST | `/api/v1/spaces/bookings/` | token | Your room bookings / `{roomId, start, durationMinutes, attendees, purpose}` (409 overlap, 403 timetabled room, 400 capacity) |
+| POST | `/api/v1/spaces/bookings/{id}/cancel/`, `/check-in/` | token | Cancel (booker or staff); check in from 10 min before to 15 min after the start |
+| GET | `/api/v1/spaces/utilization/?days=7` | staff | Per-room bookings, booked hours, no-shows, utilization % |
 | GET | `/api/v1/certifications/` | public | SkillPass catalogue |
 | GET | `/api/v1/certifications/mine/` | token | Your certification records (`status`, `isValid`, `expiresAt`) |
 | POST | `/api/v1/certifications/{id}/request/` | token | Ask faculty to certify you (creates a pending record) |
@@ -109,6 +113,12 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - A lab shows `offline` when its sensor hasn't reported for 2 minutes; an un-acknowledged alert's level still outranks that.
 - `simulate_reading <sensor> --temp --humidity --gas` stores readings marked *simulated*, shown as such in the app.
 
+## SpacePulse rooms
+- Rooms are the attendance `Classroom` model, extended with kind (classroom, study room, meeting room), capacity, location, features and `is_bookable`. Students book bookable rooms; staff can book any room (timetabled classrooms).
+- `spaces/services.py`: overlap check under a room-row lock (409), capacity, 15-240 min, up to 30 days ahead. A booking not checked in 15 minutes after its start expires and frees the room (no-show).
+- Availability shows only *that* a slot is booked to students; staff also see who. A room with an open attendance session shows "Class now".
+- Not yet: card-tap check-in for rooms (would change the classroom reader contract), PIR occupancy sensing (PIR detects movement, not verified occupancy).
+
 ## Layout
 ```
 config/     settings (env-driven), root URLs, /api/v1/ routing
@@ -120,6 +130,7 @@ attendance/ classrooms, campus cards, attendance sessions and records
 devices/    readers, device-key auth, /devices/scan/, scan log, device_key command
 inventory/  AssetX stock, loans, returns and damage reports
 safelab/    sensor telemetry, safety alerts, simulate_reading command
+spaces/     SpacePulse room bookings, check-in, no-shows, utilization
 planner/    AI Mission Planner: Claude extraction with keyword fallback, deterministic plan engine
 ```
 
