@@ -13,6 +13,7 @@ struct ContentView: View {
     @EnvironmentObject private var roomFinder: RoomFinderStore
     @EnvironmentObject private var timetables: TimetableStore
     @EnvironmentObject private var requests: RequestsStore
+    @EnvironmentObject private var faults: EquipmentFaultStore
     @State private var tab = Tab.home
 
     enum Tab { case home, bookings, requests, planner, profile }
@@ -49,6 +50,7 @@ struct ContentView: View {
         .onChange(of: auth.isSignedIn) { _, signedIn in
             if !signedIn {
                 requests.reset()
+                faults.reset()
                 bookings.reset()
                 skillPass.reset()
                 attendance.reset()

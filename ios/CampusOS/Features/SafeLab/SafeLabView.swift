@@ -1,135 +1,228 @@
 import Charts
 import SwiftUI
 
-/// SafeLab: live lab conditions from ESP32 sensor nodes, with alerts faculty acknowledge.
+/// SafeLab: faults in physical lab equipment only. Students report and track; faculty review and see analytics.
 struct SafeLabView: View {
-    @EnvironmentObject private var safeLab: SafeLabStore
+    @EnvironmentObject private var faults: EquipmentFaultStore
     @EnvironmentObject private var auth: AuthManager
     @State private var showingSignIn = false
+    @State private var page = Page.reports
+
+    enum Page { case reports, analytics }
+
+    private var isStaff: Bool { auth.currentUser?.role.isStaff == true }
 
     var body: some View {
         content
             .navigationTitle("SafeLab")
-            .task(id: auth.isSignedIn) {
-                guard auth.isSignedIn else { return safeLab.reset() }
-                await safeLab.poll()
+            .task(id: "\(auth.isSignedIn)-\(isStaff)") {
+                guard auth.isSignedIn else { return faults.reset() }
+                await faults.load(staff: isStaff)
             }
-            .sheet(isPresented: $showingSignIn) {
-                NavigationStack { SignInView(showsCancel: true) }
-            }
+            .refreshable { await faults.load(staff: isStaff) }
+            .sheet(isPresented: $showingSignIn) { NavigationStack { SignInView(showsCancel: true) } }
     }
 
     @ViewBuilder
     private var content: some View {
         if !auth.isSignedIn {
             ContentUnavailableView {
-                Label("Sign In for Lab Safety", systemImage: "shield.lefthalf.filled")
+                Label("Sign In to Report Faults", systemImage: "wrench.and.screwdriver")
             } description: {
-                Text("Live temperature, humidity and gas readings from lab sensors.")
+                Text("Report a fault in lab equipment and follow it until it's fixed.")
             } actions: {
-                Button("Sign In") { showingSignIn = true }
-                    .buttonStyle(.borderedProminent)
+                Button("Sign In") { showingSignIn = true }.buttonStyle(.borderedProminent)
             }
-        } else if let dashboard = safeLab.dashboard {
-            list(dashboard)
-        } else if let message = safeLab.loadState.errorMessage {
+        } else if faults.labs.isEmpty, let message = faults.loadState.errorMessage {
             ContentUnavailableView {
                 Label("Can't Load SafeLab", systemImage: "wifi.exclamationmark")
             } description: {
                 Text(message)
             } actions: {
-                Button("Try Again") { Task { await safeLab.refresh() } }
-                    .buttonStyle(.borderedProminent)
+                Button("Try Again") { Task { await faults.load(staff: isStaff) } }.buttonStyle(.borderedProminent)
             }
+        } else if faults.labs.isEmpty {
+            ProgressView("Loading equipment…")
         } else {
-            ProgressView("Connecting to lab sensors…")
-        }
-    }
-
-    private func list(_ dashboard: SafetyDashboard) -> some View {
-        List {
-            Section {
-                LiveStatusRow(lastUpdated: safeLab.lastUpdated, errorMessage: safeLab.loadState.errorMessage)
-            }
-            if dashboard.labs.isEmpty {
-                Section {
-                    Text("No lab sensors are reporting yet. Sensor nodes post to /api/v1/telemetry/; for a demo without hardware run `manage.py simulate_reading SENSOR-LAB002 --temp 24 --humidity 45 --gas 600`.")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            ForEach(dashboard.labs) { lab in
-                LabSafetySection(lab: lab, thresholds: dashboard.thresholds)
-            }
-            Section {
-                EmptyView()
-            } footer: {
-                Text("These are low-cost demonstration sensors, not certified life-safety devices. Always follow lab safety procedures and the building's fire and gas alarms. Gas values are raw MQ-2 readings, not calibrated concentrations.")
-            }
-        }
-        .animation(.default, value: dashboard)
-        .refreshable { await safeLab.refresh() }
-    }
-}
-
-private struct LabSafetySection: View {
-    let lab: LabSafety
-    let thresholds: SafetyThresholds
-    @EnvironmentObject private var safeLab: SafeLabStore
-    @EnvironmentObject private var auth: AuthManager
-    @State private var errorMessage: String?
-
-    var body: some View {
-        Section {
-            if let latest = lab.latest {
-                HStack(spacing: 10) {
-                    MetricTile(title: "Temperature", value: latest.temperatureC.map { String(format: "%.1f °C", $0) },
-                               level: level(latest.temperatureC, thresholds.temperatureC))
-                    MetricTile(title: "Humidity", value: latest.humidityPct.map { String(format: "%.0f %%", $0) },
-                               level: level(latest.humidityPct, thresholds.humidityPct))
-                    MetricTile(title: "Gas (raw)", value: latest.gasRaw.map(String.init),
-                               level: level(latest.gasRaw.map(Double.init), thresholds.gasRaw))
-                }
-                .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
-                HStack {
-                    Text("Updated \(latest.recordedAt.formatted(date: .omitted, time: .standard))")
-                    if latest.simulated {
-                        StatusBadge(text: "Simulated", color: .purple)
+            List {
+                if isStaff {
+                    Picker("View", selection: $page) {
+                        Text("Reports").tag(Page.reports)
+                        Text("Analytics").tag(Page.analytics)
                     }
-                    Spacer()
-                    Text(lab.sensors.map(\.id).joined(separator: ", "))
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
                 }
-                .font(.caption).foregroundStyle(.secondary)
-            }
-            if lab.history.count > 1 {
-                TrendChart(title: "Temperature °C", points: lab.history.compactMap { r in
-                    r.temperatureC.map { (r.recordedAt, $0) } },
-                           warning: thresholds.temperatureC["warning_above"],
-                           danger: thresholds.temperatureC["danger_above"])
-                TrendChart(title: "Gas sensor (raw)", points: lab.history.compactMap { r in
-                    r.gasRaw.map { (r.recordedAt, Double($0)) } },
-                           warning: thresholds.gasRaw["warning_above"],
-                           danger: thresholds.gasRaw["danger_above"])
-            }
-            ForEach(lab.alerts) { alert in
-                AlertRow(alert: alert, canAcknowledge: auth.currentUser?.role.isStaff == true,
-                         isBusy: safeLab.acknowledgingID == alert.id) {
-                    Task {
-                        do {
-                            try await safeLab.acknowledge(alert)
-                        } catch {
-                            errorMessage = error.localizedDescription
+                if isStaff && page == .analytics {
+                    AnalyticsSections(analytics: faults.analytics)
+                } else {
+                    Section {
+                        NavigationLink {
+                            ReportFaultView()
+                        } label: {
+                            Label("Report an Equipment Fault", systemImage: "exclamationmark.triangle.fill")
+                                .font(.headline)
+                        }
+                    } footer: {
+                        Text("Only for faults in lab equipment: choose the lab, then the item.")
+                    }
+                    if isStaff {
+                        FacultyReportSections()
+                    } else {
+                        Section("My Reports") {
+                            if faults.reports.isEmpty {
+                                Text("You haven't reported any faults.").foregroundStyle(.secondary)
+                            }
+                            ForEach(faults.reports) { FaultRow(report: $0, showsReporter: false) }
                         }
                     }
                 }
             }
-        } header: {
-            HStack {
-                Text(lab.labName)
-                Spacer()
-                StatusBadge(text: lab.status.label, color: lab.status.color)
+        }
+    }
+}
+
+/// Lab → that lab's equipment → category, severity, description.
+struct ReportFaultView: View {
+    @EnvironmentObject private var faults: EquipmentFaultStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var labId: String?
+    @State private var equipment: FaultEquipment?
+    @State private var category: FaultCategory?
+    @State private var severity = FaultSeverity.medium
+    @State private var description = ""
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+    @State private var submitted = false
+
+    private var canSubmit: Bool {
+        labId != nil && equipment != nil && category != nil
+            && description.trimmingCharacters(in: .whitespacesAndNewlines).count >= 5 && !isSubmitting
+    }
+
+    var body: some View {
+        Form {
+            Section("1. Laboratory") {
+                Picker("Laboratory", selection: $labId) {
+                    Text("Choose a lab").tag(String?.none)
+                    ForEach(faults.labs) { Text($0.name).tag(String?.some($0.id)) }
+                }
+            }
+            Section("2. Equipment") {
+                Picker("Equipment", selection: $equipment) {
+                    Text(labId == nil ? "Choose a lab first" : "Choose an item").tag(FaultEquipment?.none)
+                    ForEach(faults.equipment(inLab: labId)) { item in
+                        Text("\(item.name) · \(item.id)").tag(FaultEquipment?.some(item))
+                    }
+                }
+                .disabled(labId == nil)
+                if let equipment {
+                    LabeledContent("Asset ID", value: equipment.id)
+                    LabeledContent("Type", value: equipment.type)
+                }
+            }
+            Section("3. Fault") {
+                Picker("Category", selection: $category) {
+                    Text("Choose a category").tag(FaultCategory?.none)
+                    ForEach(FaultCategory.allCases) { Text($0.label).tag(FaultCategory?.some($0)) }
+                }
+                Picker("Severity", selection: $severity) {
+                    ForEach(FaultSeverity.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                TextField("Describe what's wrong with it", text: $description, axis: .vertical)
+                    .lineLimit(3...6)
+            }
+            if let errorMessage {
+                Section { Label(errorMessage, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red) }
+            }
+            Section {
+                Button {
+                    Task { await submit() }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isSubmitting { ProgressView() } else { Text("Submit Report").font(.headline) }
+                        Spacer()
+                    }
+                }
+                .disabled(!canSubmit)
             }
         }
-        .alert("Couldn't Acknowledge", isPresented: Binding(
+        .navigationTitle("Report a Fault")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: labId) { _, _ in equipment = nil }   // equipment must come from the chosen lab
+        .alert("Report Submitted", isPresented: $submitted) {
+            Button("OK") { dismiss() }
+        } message: {
+            Text("Faculty will review it. Follow its status under My Reports.")
+        }
+    }
+
+    private func submit() async {
+        guard let labId, let equipment, let category else { return }
+        isSubmitting = true
+        defer { isSubmitting = false }
+        errorMessage = nil
+        do {
+            try await faults.submit(labId: labId, equipment: equipment, category: category, severity: severity,
+                                    description: description)
+            submitted = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct FacultyReportSections: View {
+    @EnvironmentObject private var faults: EquipmentFaultStore
+    @State private var rejecting: EquipmentFaultReport?
+    @State private var reason = ""
+    @State private var errorMessage: String?
+
+    private let groups: [(String, [EquipmentFaultReport.Status])] = [
+        ("Pending Review", [.pending]), ("In Progress", [.approved, .underMaintenance]),
+        ("Closed", [.resolved, .rejected]),
+    ]
+
+    var body: some View {
+        ForEach(groups, id: \.0) { title, statuses in
+            let reports = faults.reports.filter { statuses.contains($0.status) }
+            Section("\(title) (\(reports.count))") {
+                if reports.isEmpty {
+                    Text("None.").foregroundStyle(.secondary)
+                }
+                ForEach(reports) { report in
+                    VStack(alignment: .leading, spacing: 8) {
+                        FaultRow(report: report, showsReporter: true)
+                        if faults.busyID == report.id {
+                            ProgressView()
+                        } else if !report.status.actions.isEmpty {
+                            HStack(spacing: 8) {
+                                ForEach(report.status.actions, id: \.rawValue) { action in
+                                    button(action, report)
+                                }
+                            }
+                            .font(.caption)
+                            .disabled(faults.busyID != nil)
+                        }
+                    }
+                }
+            }
+        }
+        .alert("Reject Report", isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } }),
+               presenting: rejecting) { report in
+            TextField("Reason (required)", text: $reason)
+            Button("Reject", role: .destructive) {
+                let note = reason
+                Task { await act { try await faults.decide(report, .reject, note: note) } }
+            }
+            .disabled(reason.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Cancel", role: .cancel) {}
+        } message: { report in
+            Text("\(report.reporter) will see the reason on their report for \(report.equipmentName).")
+        }
+        .alert("Couldn't Update Report", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
         ) {
             Button("OK", role: .cancel) {}
@@ -138,107 +231,118 @@ private struct LabSafetySection: View {
         }
     }
 
-    /// Colour for one value using the server's thresholds.
-    private func level(_ value: Double?, _ limits: [String: Double]) -> SafetyLevel {
-        guard let value else { return .other }
-        if let danger = limits["danger_above"], value >= danger { return .danger }
-        if let warning = limits["warning_above"], value >= warning { return .warning }
-        if let low = limits["warning_below"], value <= low { return .warning }
-        return .normal
+    @ViewBuilder
+    private func button(_ action: FaultAction, _ report: EquipmentFaultReport) -> some View {
+        switch action {
+        case .reject:
+            Button("Reject", role: .destructive) {
+                reason = ""
+                rejecting = report
+            }
+            .buttonStyle(.bordered)
+        case .approve, .resolve:
+            Button(action.label) { Task { await act { try await faults.decide(report, action) } } }
+                .buttonStyle(.borderedProminent).tint(action == .approve ? .green : .teal)
+        case .maintenance:
+            Button(action.label) { Task { await act { try await faults.decide(report, action) } } }
+                .buttonStyle(.bordered).tint(.orange)
+        }
+    }
+
+    private func act(_ action: () async throws -> Void) async {
+        do {
+            try await action()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
-private struct MetricTile: View {
-    let title: String
-    let value: String?
-    let level: SafetyLevel
+private struct FaultRow: View {
+    let report: EquipmentFaultReport
+    let showsReporter: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value ?? "—")
-                .font(.title3.weight(.semibold).monospacedDigit())
-                .foregroundStyle(level == .other ? .secondary : level.color)
-                .minimumScaleFactor(0.7)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(level.color.opacity(level == .normal || level == .other ? 0.06 : 0.14),
-                    in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct TrendChart: View {
-    let title: String
-    let points: [(Date, Double)]
-    let warning: Double?
-    let danger: Double?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Chart {
-                ForEach(Array(points.enumerated()), id: \.offset) { _, point in
-                    LineMark(x: .value("Time", point.0), y: .value(title, point.1))
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(.indigo)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(report.equipmentName).font(.headline)
+                    Text("\(report.labName) · \(report.equipmentId)").font(.caption).foregroundStyle(.secondary)
                 }
-                if let warning {
-                    RuleMark(y: .value("Warning", warning))
-                        .foregroundStyle(.orange.opacity(0.6))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                }
-                if let danger {
-                    RuleMark(y: .value("Danger", danger))
-                        .foregroundStyle(.red.opacity(0.6))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                }
+                Spacer()
+                StatusBadge(text: report.status.label, color: statusColor)
             }
-            .chartXAxis(.hidden)
-            .frame(height: 90)
-        }
-        .padding(.vertical, 4)
-        .accessibilityLabel("\(title) trend, latest \(points.last.map { String(format: "%.1f", $0.1) } ?? "none")")
-    }
-}
-
-private struct AlertRow: View {
-    let alert: SafetyAlertItem
-    let canAcknowledge: Bool
-    let isBusy: Bool
-    let acknowledge: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(alert.message, systemImage: alert.level == .danger ? "exclamationmark.octagon.fill"
-                                                                      : "exclamationmark.triangle.fill")
-                .foregroundStyle(alert.level.color)
-                .font(.subheadline.weight(.semibold))
-            Text(alert.clearedAt.map { "Back to normal since \($0.formatted(date: .omitted, time: .shortened)) · needs acknowledgement" }
-                 ?? "Since \(alert.openedAt.formatted(date: .omitted, time: .shortened)) · still out of range")
+            Text("\(report.categoryLabel) · \(report.severity.capitalized) severity")
+                .font(.subheadline.weight(.semibold)).foregroundStyle(severityColor)
+            Text(report.description).font(.subheadline)
+            Text((showsReporter ? "\(report.reporter) · " : "")
+                 + report.createdAt.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption).foregroundStyle(.secondary)
-            if canAcknowledge {
-                if isBusy {
-                    ProgressView()
-                } else {
-                    Button("Acknowledge", action: acknowledge)
-                        .buttonStyle(.bordered)
-                }
+            if !report.decisionNote.isEmpty {
+                Text("\(report.decidedBy ?? "Faculty"): “\(report.decisionNote)”").font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 2)
     }
+
+    private var statusColor: Color {
+        switch report.status {
+        case .pending: return .orange
+        case .approved: return .blue
+        case .underMaintenance: return .purple
+        case .resolved: return .green
+        case .rejected: return .red
+        case .other: return .secondary
+        }
+    }
+
+    private var severityColor: Color {
+        switch report.severity {
+        case "critical": return .red
+        case "high": return .orange
+        default: return .secondary
+        }
+    }
 }
 
-extension SafetyLevel {
-    var color: Color {
-        switch self {
-        case .normal: return .green
-        case .warning: return .orange
-        case .danger: return .red
-        case .offline, .other: return .gray
+/// Equipment-only charts; every number comes from the server.
+private struct AnalyticsSections: View {
+    let analytics: FaultAnalytics?
+
+    var body: some View {
+        if let analytics {
+            Section {
+                Text("\(analytics.total) equipment fault reports").font(.headline)
+            }
+            chart("Monthly Fault Reports", analytics.monthly, color: .indigo, horizontal: false)
+            chart("Reports by Status", analytics.byStatus, color: .teal, horizontal: true)
+            chart("Faults by Laboratory", analytics.byLab, color: .orange, horizontal: true)
+            chart("Faults by Equipment Type", analytics.byEquipmentType, color: .purple, horizontal: true)
+            chart("Most Frequently Reported Equipment", analytics.mostReported, color: .red, horizontal: true)
+        } else {
+            Section { ProgressView() }
+        }
+    }
+
+    private func chart(_ title: String, _ buckets: [FaultBucket], color: Color, horizontal: Bool) -> some View {
+        Section(title) {
+            if buckets.isEmpty {
+                Text("No reports yet.").foregroundStyle(.secondary)
+            } else if horizontal {
+                Chart(buckets) { bucket in
+                    BarMark(x: .value("Reports", bucket.count), y: .value("Item", bucket.label))
+                        .foregroundStyle(color)
+                        .annotation(position: .trailing) { Text("\(bucket.count)").font(.caption2) }
+                }
+                .frame(height: CGFloat(max(buckets.count, 2)) * 32)
+            } else {
+                Chart(buckets) { bucket in
+                    BarMark(x: .value("Month", bucket.label), y: .value("Reports", bucket.count))
+                        .foregroundStyle(color)
+                        .annotation(position: .top) { Text("\(bucket.count)").font(.caption2) }
+                }
+                .frame(height: 180)
+            }
         }
     }
 }

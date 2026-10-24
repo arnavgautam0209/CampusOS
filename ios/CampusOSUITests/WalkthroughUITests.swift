@@ -72,8 +72,12 @@ final class WalkthroughUITests: XCTestCase {
 
         // SafeLab
         openCard("SafeLab")
-        waitFor("AI & Computing Lab", timeout: 15)
+        waitFor("Report an Equipment Fault", timeout: 15)
         shot("safelab")
+        tapButton("Report an Equipment Fault")
+        waitFor("Laboratory", timeout: 10)
+        shot("safelab-report")
+        back()
         back()
 
         // SpacePulse

@@ -115,6 +115,18 @@ struct PreviewSpacesService: SpacesService {
     func checkIn(id: UUID) async throws -> RoomBooking { throw APIError.notFound("Not available in previews.") }
 }
 
+struct PreviewFaultService: EquipmentFaultService {
+    func fetchLabs() async throws -> [FaultLab] { [] }
+    func fetchReports() async throws -> [EquipmentFaultReport] { [] }
+    func submit(_ report: FaultSubmission) async throws -> EquipmentFaultReport {
+        throw APIError.notFound("Not available in previews.")
+    }
+    func decide(id: Int, action: FaultAction, note: String) async throws -> EquipmentFaultReport {
+        throw APIError.notFound("Not available in previews.")
+    }
+    func fetchAnalytics() async throws -> FaultAnalytics { throw APIError.notFound("Not available in previews.") }
+}
+
 struct PreviewRequestsService: RequestsService {
     func fetchRequests() async throws -> [CampusRequest] { [] }
     func approve(_ request: CampusRequest, note: String) async throws {}
@@ -157,6 +169,7 @@ extension View {
             .environmentObject(RoomFinderStore(service: PreviewSpacePulseService()))
             .environmentObject(TimetableStore(service: PreviewSpacePulseService()))
             .environmentObject(RequestsStore(service: PreviewRequestsService()))
+            .environmentObject(EquipmentFaultStore(service: PreviewFaultService()))
     }
 }
 #endif

@@ -43,7 +43,7 @@ struct HomeView: View {
                         ModuleCard(title: "AssetX", subtitle: "Inventory & tools", symbol: "shippingbox.fill", tint: .orange)
                     }
                     NavigationLink { SafeLabView() } label: {
-                        ModuleCard(title: "SafeLab", subtitle: "Safety monitoring", symbol: "shield.fill", tint: .red)
+                        ModuleCard(title: "SafeLab", subtitle: "Equipment faults", symbol: "wrench.and.screwdriver.fill", tint: .red)
                     }
                     NavigationLink { SpacePulseView() } label: {
                         ModuleCard(title: "SpacePulse", subtitle: "Rooms & bookings", symbol: "building.2.fill", tint: .teal)
