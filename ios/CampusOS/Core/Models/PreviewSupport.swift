@@ -60,6 +60,20 @@ struct PreviewPlannerService: PlannerService {
     }
 }
 
+struct PreviewInventoryService: InventoryService {
+    func fetchInventory() async throws -> [InventoryItem] { [] }
+    func fetchMyLoans() async throws -> [EquipmentLoan] { [] }
+    func fetchAllLoans() async throws -> [EquipmentLoan] { [] }
+
+    func borrow(equipmentId: String, quantity: Int, days: Int) async throws -> EquipmentLoan {
+        throw APIError.notFound("Not available in previews.")
+    }
+
+    func returnLoan(id: Int, condition: EquipmentLoan.Condition, note: String) async throws -> EquipmentLoan {
+        throw APIError.notFound("Not available in previews.")
+    }
+}
+
 extension View {
     @MainActor
     func previewEnvironment() -> some View {
@@ -70,6 +84,7 @@ extension View {
             .environmentObject(SkillPassStore(service: PreviewSkillPassService()))
             .environmentObject(AttendanceStore(service: PreviewAttendanceService()))
             .environmentObject(PlannerStore(service: PreviewPlannerService()))
+            .environmentObject(InventoryStore(service: PreviewInventoryService()))
     }
 }
 #endif
