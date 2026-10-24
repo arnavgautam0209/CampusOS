@@ -58,6 +58,8 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/telemetry/` | device key (sensor in a lab) | `{temperature_c, humidity_pct, gas_raw}` from a SafeLab sensor node; see firmware/README.md |
 | GET | `/api/v1/safelab/` | token | Per-lab status (normal/warning/danger/offline), latest reading, last 40 readings, open alerts, thresholds |
 | POST | `/api/v1/safelab/alerts/{id}/acknowledge/` | staff | Acknowledge a safety alert |
+| GET | `/api/v1/requests/` | token | Admins: every pending lab booking and equipment request; students: their own requests with status and decision (`?status=` filters) |
+| POST | `/api/v1/inventory/loans/{id}/approve/`, `/reject/` | staff | `{note}`: approve turns a student's equipment request into a checkout (stock and SkillPass re-checked); reject reserves nothing |
 | GET | `/api/v1/spaces/?date=YYYY-MM-DD` | token | Rooms (kind, capacity, location, features, bookable, free/class now) with busy slots and timetabled `lectures` 08:00-20:00 |
 | GET | `/api/v1/spaces/availability/?date=&start=HH:MM&duration=60&group_size=8&mode=shared` | token | Rooms that fit the group for the whole time, best fit first: `recommended`, `rooms`, `unavailable` (with `reason`), `message`, active `timetable` |
 | GET/POST | `/api/v1/spaces/bookings/` (also `bookings/mine/`) | token | Your room bookings / `{roomId, start, durationMinutes, attendees, purpose, mode}`; `mode` is `shared` or `exclusive` (default). 409 no seats/overlap/class, 403 timetabled room, 400 capacity |
@@ -133,6 +135,12 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - Readings are rated against demo thresholds in `safelab/rules.py` (hobby sensors: not certified limits). Out-of-range kinds open one alert per lab and kind, which escalates but never downgrades, notes when readings return to normal, and stays until faculty acknowledge it.
 - A lab shows `offline` when its sensor hasn't reported for 2 minutes; an un-acknowledged alert's level still outranks that.
 - `simulate_reading <sensor> --temp --humidity --gas` stores readings marked *simulated*, shown as such in the app.
+
+## Student requests and admin approval
+- A student's lab booking (LabOS) and equipment borrow (AssetX) are created as **pending**. Admins (staff) see both in `GET /api/v1/requests/` and decide each through its module: `bookings/{id}/approve|decline/` and `inventory/loans/{id}/approve|reject/`, with an optional note the student sees.
+- A pending lab booking holds its slot, so no one else can double-book it. A pending equipment request reserves nothing: approval re-checks stock and SkillPass under a row lock, so two approvals can't hand out more units than exist (409). Rejected requests never hold anything. Staff bookings and borrows are confirmed at once, and no one can approve their own request.
+- Demo accounts: `DEMO_STUDENT_PASSWORD=… DEMO_ADMIN_PASSWORD=… .venv/bin/python manage.py seed_demo_accounts` creates `demo_student` and `demo_admin` (staff + superuser) and the demo labs and equipment. It's safe to rerun. Without the variables, a password is generated and printed once, only when the account is first created; existing passwords are never reset.
+- In the app, the **Requests** tab shows **Admin Requests** (Approve / Reject with reason) to admins, and opens automatically after an admin signs in. Students see **My Requests** with each status and decision.
 
 ## SpacePulse rooms
 - Rooms are the attendance `Classroom` model, extended with kind (classroom, study room, meeting room), capacity, location, features and `is_bookable`. Students book bookable rooms; staff can book any room (timetabled classrooms).
