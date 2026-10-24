@@ -25,7 +25,7 @@ xcodebuild test -project ios/CampusOS.xcodeproj -scheme CampusOS -destination 'p
 
 1. seeds demo users and data with a one-time password: `demo_ui_*` users, a separate `DEMO-ROOM` with its own `READER-DEMO` reader, demo card UIDs and a booking made through the normal booking rules
 2. starts the backend on `127.0.0.1:8000` unless one is already running
-3. runs the `WalkthroughUITests` UI test (sign-in, LabOS, SkillPass, Bookings, AI Planner, ProxyGuard as student and faculty)
+3. runs the `WalkthroughUITests` UI test (sign-in, LabOS, SkillPass, Bookings, AI Planner, ProxyGuard as student and faculty, attendance report and PDF)
 4. removes the demo data again, even if the run fails
 
 Real rooms, readers, device keys and cards are never touched. Needs the backend virtualenv (next section) and Xcode. Pick a simulator with `SIMULATOR="iPhone 17 Pro" scripts/walkthrough.sh`. The UI test skips itself in normal ⌘U runs.
@@ -47,6 +47,7 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - SkillPass faculty review: staff see **Requests to Review** on the SkillPass screen and approve or decline with one tap (self-approval is refused by the server)
 - SkillPass (**live backend data**): your certifications with status and expiry, available training with a **Request Training** / **Request Renewal** button; lab details list required certifications with your standing, and equipment shows its own requirements
 - ProxyGuard (**live backend data**): faculty open and close sessions, and see who's present, a live feed of reader taps (new taps highlighted) and reader status. Students see their own attendance. Both refresh every 3 s while open
+- AttendX session reports: faculty pick any session under ProxyGuard → **Attendance Reports** and see total, present, absent and attendance %, the present and absent students separately (roll number, tap time), and **Download / Share PDF** (server-generated, opened in Quick Look with the share sheet). Open sessions are marked provisional
 - AssetX (**live backend data**): equipment by lab with available/total units, low-stock, lab-use-only and maintenance badges; borrow with quantity and loan length, return as OK/damaged/missing; faculty see everything out on loan and damage reports
 - SafeLab (**live sensor data**): per-lab status, temperature/humidity/gas tiles, trend charts with warning and danger lines, open alerts that faculty acknowledge, offline and simulated labels; refreshes every 5 s
 - SpacePulse (**live backend data**): pick a day, filter study/meeting rooms and classrooms, see free-now and a 08:00-20:00 timeline per room, book a free slot with people and purpose, check in or cancel; faculty see who booked and 7-day room usage
@@ -61,6 +62,7 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - SkillPass: certifications with faculty approval, expiry and revocation; restricted labs refuse bookings (403) without the required certification
 - Lab booking approval: per-lab `requiresApproval`, pending requests that hold the slot, staff approve/decline (no self-approval, SkillPass re-checked), auto-expiry at the start time, door readers deny pending requests
 - Lab check-in: lab door readers validate the student's booking and SkillPass certifications, answer granted/denied, and record the actual session start
+- Attendance reports: class rosters with roll numbers (`ClassroomEnrollment`), a staff-only session report as JSON, A4 PDF (reportlab) and CSV, where present means a recorded tap for that session and absent means on the roster without one; `seed_attendance_demo` builds the four-student ECE example
 - Attendance: ESP32 readers POST card taps to `/api/v1/devices/scan/` with a device key. Attendance is marked only while faculty have a session open in that room, with duplicate protection and a log of every scan
 
 **Not yet built:** real roles, push notifications, the full ProxyGuard verification flow, card-tap room check-in.

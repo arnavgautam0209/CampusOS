@@ -43,8 +43,12 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/devices/scan/` | device key | Card tap from a reader: classroom attendance (`classroomId`) or lab check-in (`labId`). See [firmware/README.md](../firmware/README.md) for the full contract |
 | GET | `/api/v1/attendance/live/` | staff | Open sessions with who's present, readers, and the latest 25 scans (polled by the app) |
 | GET | `/api/v1/attendance/mine/` | token | Your attendance records, newest first |
+| GET | `/api/v1/attendance/sessions/` | staff | Recent sessions, open and closed, newest first, with `presentCount` (`?classroom=ECE` to filter) |
 | POST | `/api/v1/attendance/sessions/` | staff | `{classroomId, title}` opens a session (409 if the room already has one) |
 | POST | `/api/v1/attendance/sessions/{id}/close/` | staff | Close a session; readers in that room stop marking |
+| GET | `/api/v1/attendance/sessions/{id}/report/` | staff | Session report: session, classroom, faculty, summary (total, present, absent, `attendancePercentage`), `presentStudents`, `absentStudents`, `notEnrolledAttendees`; `session.status` is `final` or `provisional` |
+| GET | `/api/v1/attendance/sessions/{id}/report/pdf/` | staff | The same report as an A4 PDF download (`AttendX_<room>_Session_<id>.pdf`) |
+| GET | `/api/v1/attendance/sessions/{id}/report/csv/` | staff | The same report as CSV |
 | POST | `/api/v1/ai/planner/` | token | `{prompt}` returns recommended labs, free slots, SkillPass status, missing items and next steps (rate-limited per user) |
 | POST | `/api/scan/` | device key (or none in local open-scan mode) | AttendX firmware contract `{card_uid, classroom}` for classroom attendance; see firmware/README.md |
 | GET | `/api/v1/inventory/` | public | Equipment with `totalQuantity`, `availableQuantity`, `isLowStock`, `isLoanable`, `underMaintenance` |
@@ -88,9 +92,17 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - A reader is registered to one classroom. Scans are accepted only while faculty have an **attendance session** open there (from the app's ProxyGuard dashboard or admin → Attendance sessions). Who opened and closed each session is recorded. The database allows one open session per classroom and one record per student per session.
 - Card UIDs are registered to students in admin → Campus cards. Every tap, including unknown cards, is logged in admin → Scan events.
 - Faculty can add attendance by hand in a session's admin page; those rows are marked `manual`.
-- Hardware testing commands: `register_student <roll_number> <card_uid> --name "..."` (username = roll number) and `open_session <classroom> [title]` / `open_session <classroom> --close`.
+- Hardware testing commands: `register_student <roll_number> <card_uid> --name "..." [--classroom ECE]` (username = roll number; `--classroom` also puts them on that class roster) and `open_session <classroom> [title]` / `open_session <classroom> --close`.
 - `CAMPUSOS_OPEN_SCAN=1` lets `/api/scan/` accept taps without a device key, only while `DJANGO_DEBUG` is on. Before any shared or production use: leave it off, issue every reader a key, use HTTPS, and register readers per classroom.
-- Limitation: a UID isn't identity proof, and enrolment isn't checked yet. See firmware/README.md.
+- Limitation: a UID isn't identity proof, and taps aren't refused for students who aren't enrolled (the report lists them separately). See firmware/README.md.
+
+## Session attendance reports
+- **Roster:** `ClassroomEnrollment` (admin → Classroom enrollments) holds each class's students and their roll numbers. Owning a card or having attended never enrolls anyone. To remove a student, set **Left at** instead of deleting the row, so past reports keep them.
+- **Present** means an attendance record exists for that session (a card tap while it was open, or a row faculty added by hand, shown as "Added by faculty"). Everyone else on the roster is **absent**. Nobody is present by default, records never cross sessions, and a repeat tap never adds a second record.
+- **Roster policy:** a session's roster is everyone enrolled in its classroom at any time while it ran (enrolled before it ended, and not left before it opened). A closed session's report is therefore final: later enrollments or departures don't change it, and taps after closing are refused. Reports for open sessions are marked provisional.
+- Attendees with a record but no enrollment appear under **Attended but not enrolled** and aren't counted in the totals or percentage. The percentage is present ÷ roster, rounded to one decimal, and is `null` for an empty roster.
+- Reports are read-only (`attendance/reports.py`), take two queries however large the class is, and are staff-only even when `CAMPUSOS_OPEN_SCAN` is on. The scan reply's `roll_number` is the roster roll number when the student is enrolled in that classroom, otherwise the username as before.
+- **Demo:** `manage.py seed_attendance_demo` creates ECE001–ECE004 (Aarav Sharma, Riya Verma, Kabir Mehta, Ananya Singh) with sample cards `A1B2C3D4`, `B1C2D3E4`, `C1D2E3F4`, `D1E2F3A4`, enrolls them in ECE, and creates a closed session "Embedded Systems Lecture 01" in which only Aarav and Riya tapped (2 of 4, 50%). It's safe to rerun, never changes an existing user or card that doesn't match the demo data, and gives the students no password. It reuses `demo_faculty` (or creates it without a password).
 
 ## Lab check-in
 - A reader belongs to a classroom **or** a lab (database constraint). Lab door readers send `labId`.
@@ -128,7 +140,7 @@ accounts/   token sign-in and /auth/me/
 labs/       Lab + Equipment models, read-only API, seed_demo command
 bookings/   Booking model, booking rules (services.py), API
 skillpass/  certifications, approval workflow, access checks
-attendance/ classrooms, campus cards, attendance sessions and records
+attendance/ classrooms, campus cards, enrollments, attendance sessions and records; reports.py builds session reports
 devices/    readers, device-key auth, /devices/scan/, scan log, device_key command
 inventory/  AssetX stock, loans, returns and damage reports
 safelab/    sensor telemetry, safety alerts, simulate_reading command

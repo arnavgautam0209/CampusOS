@@ -29,7 +29,8 @@ Authorization: Device <DEVICE_KEY>      (optional only in local open-scan mode, 
 | 500 | `error` | — | Server problem; retry later |
 
 Every response has `status` and `message`. `card_uid` may be sent as `a1:b2:c3:d4`; the server normalizes it.
-`roll_number` is the student's username (register students with their roll number as the username).
+`roll_number` is the student's roll number on that classroom's roster, or their username if they aren't enrolled
+(`register_student` uses the roll number as the username, and `--classroom` enrolls them).
 
 **Local open-scan mode (no key):** start the server with `CAMPUSOS_OPEN_SCAN=1` (and the default `DJANGO_DEBUG=1`).
 Requests without a key are then attributed to the classroom's registered reader (`READER-ECE` for `ECE`).
@@ -40,10 +41,25 @@ everywhere else.
 
 ```bash
 .venv/bin/python manage.py seed_demo                                   # creates classroom ECE and reader READER-ECE
-.venv/bin/python manage.py register_student ECE001 A1B2C3D4 --name "Asha Verma"
+.venv/bin/python manage.py register_student ECE001 A1B2C3D4 --name "Asha Verma" --classroom ECE
 .venv/bin/python manage.py open_session ECE "ECE Lecture 1"           # --close to close it
 CAMPUSOS_OPEN_SCAN=1 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,<MAC_WIFI_IP> .venv/bin/python manage.py runserver 0.0.0.0:8000
 ```
+
+**Attendance report with real cards (ESP32-S3 + RC522).** The demo seed's UIDs are samples; to run the
+four-student scenario with physical cards, read each card's UID from the ESP32 serial monitor (or the server's
+Scan events, where unknown cards are logged) and attach it to a demo student:
+
+```bash
+.venv/bin/python manage.py seed_attendance_demo                        # roster ECE001–ECE004 + a sample report
+.venv/bin/python manage.py register_student ECE001 <UID of card 1> --classroom ECE   # adds a card; keeps the sample one
+.venv/bin/python manage.py register_student ECE002 <UID of card 2> --classroom ECE
+.venv/bin/python manage.py open_session ECE "Embedded Systems Lecture 02"
+```
+
+Tap the two cards, close the session (app or `open_session ECE --close`), then in the app open
+ProxyGuard → **Attendance Reports** → the session for 2 present, 2 absent, 50%, and **Download / Share PDF**.
+Only one ECE session can be open at a time, so close any open hardware test session first.
 
 ## Scan API contract
 
