@@ -10,8 +10,8 @@ class EquipmentInline(admin.TabularInline):
 
 @admin.register(Lab)
 class LabAdmin(admin.ModelAdmin):
-    list_display = ["id", "name", "location", "capacity", "is_open_for_booking"]
-    list_filter = ["is_open_for_booking"]
+    list_display = ["id", "name", "location", "capacity", "is_open_for_booking", "requires_approval"]
+    list_filter = ["is_open_for_booking", "requires_approval"]
     filter_horizontal = ["required_certifications"]
     inlines = [EquipmentInline]
 

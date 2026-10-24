@@ -312,6 +312,17 @@ class LabCheckInTests(TestCase):
         booking.refresh_from_db()
         self.assertIsNone(booking.checked_in_at)
 
+    def test_pending_request_is_denied_as_awaiting_approval(self):
+        booking = self.book()
+        booking.status = "pending"
+        booking.save()
+        response = self.tap()
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["reason"], "awaiting_approval")
+        self.assertIn("waiting for faculty approval", response.json()["message"])
+        booking.refresh_from_db()
+        self.assertIsNone(booking.checked_in_at)
+
     def test_no_booking_is_denied(self):
         response = self.tap()
         self.assertEqual(response.status_code, 403)

@@ -9,7 +9,7 @@ from typing import NamedTuple, Optional, Tuple
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.exceptions import APIException, NotFound, ValidationError
+from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 
 from labs.models import Lab
 from skillpass.services import ensure_lab_access, missing_certifications
@@ -27,7 +27,18 @@ class BookingConflict(APIException):
     default_code = "booking_conflict"
 
 
-def create_booking(user, lab_id, start, duration_minutes):
+def expire_stale_requests(now=None):
+    """Requests nobody approved before their start time can't be used any more; free the slot."""
+    now = now or timezone.now()
+    return Booking.objects.filter(status=Booking.Status.PENDING, start__lte=now).update(
+        status=Booking.Status.EXPIRED)
+
+
+def create_booking(user, lab_id, start, duration_minutes, purpose=""):
+    """
+    Students' bookings for labs that require approval start as PENDING (holding the
+    slot) until faculty approve them; staff bookings and other labs are confirmed.
+    """
     if not (MIN_DURATION_MINUTES <= duration_minutes <= MAX_DURATION_MINUTES):
         raise ValidationError(
             {"durationMinutes": f"Must be between {MIN_DURATION_MINUTES} and {MAX_DURATION_MINUTES} minutes."}
@@ -36,6 +47,7 @@ def create_booking(user, lab_id, start, duration_minutes):
         raise ValidationError({"start": "Choose a future start time."})
 
     end = start + timedelta(minutes=duration_minutes)
+    expire_stale_requests()
 
     with transaction.atomic():
         # Locking the lab row serialises concurrent bookings for the same lab
@@ -48,18 +60,23 @@ def create_booking(user, lab_id, start, duration_minutes):
         # SkillPass: certifications must stay valid for the whole session.
         ensure_lab_access(user, lab, valid_until=end)
 
+        # Pending requests hold the slot too, so two students can't request the same time.
         overlaps = Booking.objects.filter(
-            lab=lab, status=Booking.Status.ACTIVE, start__lt=end, end__gt=start
+            lab=lab, status__in=Booking.HOLDS_SLOT, start__lt=end, end__gt=start
         ).exists()
         if overlaps:
             raise BookingConflict()
 
-        return Booking.objects.create(user=user, lab=lab, start=start, end=end)
+        needs_approval = lab.requires_approval and not user.is_staff
+        return Booking.objects.create(
+            user=user, lab=lab, start=start, end=end, purpose=(purpose or "").strip()[:200],
+            status=Booking.Status.PENDING if needs_approval else Booking.Status.ACTIVE)
 
 
 def cancel_booking(booking):
-    if booking.status != Booking.Status.ACTIVE:
-        raise ValidationError({"status": "Only active bookings can be cancelled."})
+    """Cancels a confirmed booking or withdraws a pending request."""
+    if booking.status not in Booking.HOLDS_SLOT:
+        raise ValidationError({"status": "Only active bookings or pending requests can be cancelled."})
     if booking.end <= timezone.now():
         raise ValidationError({"status": "This booking has already ended."})
     if booking.checked_in_at:
@@ -69,6 +86,44 @@ def cancel_booking(booking):
     booking.save(update_fields=["status", "cancelled_at"])
     return booking
 
+
+
+def _ensure_reviewable(booking, reviewer, now):
+    if not reviewer.is_staff:
+        raise PermissionDenied("Only faculty can review lab requests.")
+    if booking.user_id == reviewer.pk:
+        raise PermissionDenied("You can't approve your own request.")
+    expire_stale_requests(now)
+    booking.refresh_from_db()
+    if booking.status == Booking.Status.EXPIRED:
+        raise ValidationError({"status": "This request expired: its start time has passed."})
+    if booking.status != Booking.Status.PENDING:
+        raise ValidationError({"status": "This request has already been decided or withdrawn."})
+
+
+def approve_booking(booking, reviewer, note="", now=None):
+    """Confirms a pending request. Re-checks SkillPass in case a certification changed since."""
+    now = now or timezone.now()
+    with transaction.atomic():
+        _ensure_reviewable(booking, reviewer, now)
+        ensure_lab_access(booking.user, booking.lab, valid_until=booking.end)
+        booking.status = Booking.Status.ACTIVE
+        booking.decided_by, booking.decided_at = reviewer, now
+        booking.decision_note = (note or "").strip()[:200]
+        booking.save(update_fields=["status", "decided_by", "decided_at", "decision_note"])
+    return booking
+
+
+def decline_booking(booking, reviewer, note="", now=None):
+    """Declines a pending request and frees the slot."""
+    now = now or timezone.now()
+    with transaction.atomic():
+        _ensure_reviewable(booking, reviewer, now)
+        booking.status = Booking.Status.DECLINED
+        booking.decided_by, booking.decided_at = reviewer, now
+        booking.decision_note = (note or "").strip()[:200]
+        booking.save(update_fields=["status", "decided_by", "decided_at", "decision_note"])
+    return booking
 
 class CheckIn(NamedTuple):
     result: str                      # "granted", "already_checked_in" or "denied"
@@ -94,6 +149,11 @@ def check_in(user, lab, device=None, now=None):
                            start__lte=now + CHECK_IN_EARLY, end__gt=now)
                    .order_by("start").first())
         if booking is None:
+            awaiting = Booking.objects.filter(user=user, lab=lab, status=Booking.Status.PENDING,
+                                              start__lte=now + CHECK_IN_EARLY, end__gt=now).first()
+            if awaiting:
+                return CheckIn("denied", "Your request is still waiting for faculty approval.", booking=awaiting,
+                               reason="awaiting_approval")
             later = (Booking.objects.filter(user=user, lab=lab, status=Booking.Status.ACTIVE,
                                             start__gt=now + CHECK_IN_EARLY,
                                             start__date=timezone.localdate(now))

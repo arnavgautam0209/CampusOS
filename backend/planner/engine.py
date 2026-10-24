@@ -179,7 +179,7 @@ def _free_slots(lab, start_day, duration_minutes, preferred_start, now):
         day = start_day + timedelta(days=offset)
         day_start = timezone.make_aware(datetime.combine(day, DAY_START), tz)
         day_end = timezone.make_aware(datetime.combine(day, DAY_END), tz)
-        taken = list(Booking.objects.filter(lab=lab, status=Booking.Status.ACTIVE,
+        taken = list(Booking.objects.filter(lab=lab, status__in=Booking.HOLDS_SLOT,
                                             start__lt=day_end, end__gt=day_start).values_list("start", "end"))
         free = []
         slot = day_start
@@ -238,7 +238,9 @@ def _next_steps(recommendations, missing, requirements, duration):
     if best["canBook"] and best["suggestedSlots"]:
         first = datetime.fromisoformat(best["suggestedSlots"][0]["start"])
         local = timezone.localtime(first)
-        steps.append(f"Reserve {lab_name} on {local:%a %d %b} at {local:%H:%M} for {duration} minutes.")
+        verb = "Request" if best["lab"]["requiresApproval"] else "Reserve"
+        note = " Faculty approve requests for this lab." if best["lab"]["requiresApproval"] else ""
+        steps.append(f"{verb} {lab_name} on {local:%a %d %b} at {local:%H:%M} for {duration} minutes.{note}")
     elif not best["canBook"]:
         steps.append(f"Resolve the blockers above before booking {lab_name}.")
     for item in missing:

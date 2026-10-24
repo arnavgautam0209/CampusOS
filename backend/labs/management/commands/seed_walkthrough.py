@@ -19,7 +19,7 @@ from rest_framework.exceptions import APIException
 from rest_framework.test import APIClient
 
 from attendance.models import AttendanceSession, CampusCard, Classroom
-from bookings.services import create_booking
+from bookings.services import approve_booking, create_booking
 from devices.models import Device
 from inventory.services import checkout
 from safelab.models import SensorReading
@@ -91,7 +91,8 @@ class Command(BaseCommand):
         for hour in range(14, 18):
             start = timezone.make_aware(datetime.combine(day, time(hour, 0)))
             try:
-                create_booking(student, "LAB004", start, 60)
+                booking = create_booking(student, "LAB004", start, 60, purpose="Train the line-follower model")
+                approve_booking(booking, faculty, note="Approved for the demo")
                 break
             except APIException:
                 continue
@@ -110,7 +111,8 @@ class Command(BaseCommand):
         door = Device.objects.create(id=LAB_READER_ID, name="Demo lab door reader", lab_id=CHECK_IN_LAB)
         start = (timezone.now() + timedelta(minutes=5)).replace(second=0, microsecond=0)
         try:
-            create_booking(student, CHECK_IN_LAB, start, 60)
+            booking = create_booking(student, CHECK_IN_LAB, start, 60, purpose="Build the robot chassis")
+            approve_booking(booking, faculty)
         except APIException:
             self.stdout.write("Robotics Lab is booked right now, so the demo skips the check-in.")
         else:

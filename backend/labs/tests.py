@@ -37,12 +37,13 @@ class LabApiTests(TestCase):
         robotics = labs[0]
         self.assertEqual(
             set(robotics),
-            {"id", "name", "location", "symbol", "capacity", "equipment", "isOpenForBooking",
+            {"id", "name", "location", "symbol", "capacity", "equipment", "isOpenForBooking", "requiresApproval",
              "requiredCertifications"},
         )
         self.assertEqual(set(robotics["equipment"][0]),
                          {"id", "name", "category", "isAvailable", "requiredCertifications"})
         self.assertTrue(robotics["isOpenForBooking"])
+        self.assertTrue(robotics["requiresApproval"])
         self.assertFalse(labs[2]["isOpenForBooking"])
         self.assertEqual(robotics["requiredCertifications"], [])
         self.assertEqual(labs[1]["requiredCertifications"], ["CERT-ELEC-BASIC"])

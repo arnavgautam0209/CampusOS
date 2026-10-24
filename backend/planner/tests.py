@@ -100,7 +100,8 @@ class ClaudePathTests(PlannerTestCase):
         self.assertEqual((soldering["status"], soldering["requiredFor"], soldering["equipment"]),
                          ("not_requested", "equipment", "Soldering Station"))
         self.assertTrue(any("IR sensors" in step for step in body["nextSteps"]))
-        self.assertTrue(any(step.startswith("Reserve Robotics Lab") for step in body["nextSteps"]))
+        self.assertTrue(any(step.startswith("Request Robotics Lab") and "Faculty approve" in step
+                            for step in body["nextSteps"]))
 
     def test_request_uses_structured_output_and_catalogue_ids(self):
         patcher, create = self.claude()

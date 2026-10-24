@@ -9,6 +9,8 @@ class Lab(models.Model):
     symbol = models.CharField(max_length=64, help_text="SF Symbol name shown in the iOS app.")
     capacity = models.PositiveIntegerField()
     is_open_for_booking = models.BooleanField(default=True)
+    requires_approval = models.BooleanField(
+        default=True, help_text="Student bookings wait for faculty approval before they're confirmed.")
     required_certifications = models.ManyToManyField(
         "skillpass.Certification", blank=True, related_name="required_for_labs",
         help_text="Students must hold all of these (approved and unexpired) to book the lab.",
