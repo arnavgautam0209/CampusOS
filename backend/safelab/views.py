@@ -3,7 +3,8 @@ from datetime import timedelta
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -11,8 +12,8 @@ from devices.authentication import DeviceKeyAuthentication, IsDevice
 from devices.models import Device
 from labs.models import Lab
 
-from . import rules, services
-from .models import SafetyAlert, SensorReading
+from . import faults, rules, services
+from .models import EquipmentFault, SafetyAlert, SensorReading
 
 OFFLINE_AFTER = timedelta(minutes=2)
 HISTORY_POINTS = 40
@@ -130,3 +131,51 @@ def acknowledge(request, pk):
     """POST /api/v1/safelab/alerts/{id}/acknowledge/ : faculty only."""
     alert = services.acknowledge(get_object_or_404(SafetyAlert, pk=pk), request.user)
     return Response(_alert_json(alert) | {"acknowledgedBy": request.user.get_username()})
+
+
+# MARK: Equipment fault reports
+
+
+@api_view(["GET"])
+def fault_labs(request):
+    """GET /safelab/labs/: every lab with its equipment (asset ID, name, type) for the report form."""
+    labs = Lab.objects.prefetch_related("equipment").order_by("id")
+    return Response([{
+        "id": lab.id, "name": lab.name,
+        "equipment": [{"id": e.id, "name": e.name, "type": e.category, "isAvailable": e.is_available}
+                      for e in lab.equipment.all().order_by("name", "id")],
+    } for lab in labs])
+
+
+@api_view(["GET", "POST"])
+def fault_reports(request):
+    """
+    GET  /safelab/faults/   students: their reports; faculty: every report (?status= filters)
+    POST /safelab/faults/   {labId, equipmentId, category, severity, description} → pending
+    """
+    if request.method == "POST":
+        data = request.data if isinstance(request.data, dict) else {}
+        fault = faults.submit(request.user, data)
+        return Response(faults.fault_json(fault), status=status.HTTP_201_CREATED)
+    reports = EquipmentFault.objects.select_related("equipment", "lab", "reporter", "decided_by")
+    if not request.user.is_staff:
+        reports = reports.filter(reporter=request.user)
+    if request.query_params.get("status"):
+        reports = reports.filter(status=request.query_params["status"])
+    return Response([faults.fault_json(f) for f in reports[:300]])
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def fault_decide(request, pk, action):
+    """POST /safelab/faults/{id}/approve|reject|maintenance|resolve/ {note} (reason required to reject)."""
+    note = request.data.get("note", "") if isinstance(request.data, dict) else ""
+    fault = faults.decide(get_object_or_404(EquipmentFault, pk=pk), request.user, action, str(note))
+    return Response(faults.fault_json(fault))
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def fault_analytics(request):
+    """GET /safelab/faults/analytics/: chart data computed from the reports."""
+    return Response(faults.analytics())

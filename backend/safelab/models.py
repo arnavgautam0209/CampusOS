@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 
 class Level(models.TextChoices):
@@ -63,3 +64,47 @@ class SafetyAlert(models.Model):
 
     def __str__(self):
         return f"{self.lab_id} {self.kind} {self.level}"
+
+
+class EquipmentFault(models.Model):
+    """A student's report that one specific piece of lab equipment is faulty. Equipment faults only."""
+
+    class Category(models.TextChoices):
+        NOT_WORKING = "not_working", "Not Working"
+        PARTIALLY_WORKING = "partially_working", "Partially Working"
+        PHYSICALLY_DAMAGED = "physically_damaged", "Physically Damaged"
+        UNEXPECTED_BEHAVIOUR = "unexpected_behaviour", "Unexpected Behaviour"
+        OTHER = "other", "Other Equipment Fault"
+
+    class Severity(models.TextChoices):
+        LOW = "low", "Low"
+        MEDIUM = "medium", "Medium"
+        HIGH = "high", "High"
+        CRITICAL = "critical", "Critical"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        UNDER_MAINTENANCE = "under_maintenance", "Under Maintenance"
+        RESOLVED = "resolved", "Resolved"
+
+    equipment = models.ForeignKey("labs.Equipment", on_delete=models.PROTECT, related_name="faults")
+    lab = models.ForeignKey("labs.Lab", on_delete=models.PROTECT, related_name="equipment_faults")
+    reporter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="equipment_faults")
+    category = models.CharField(max_length=32, choices=Category.choices)
+    severity = models.CharField(max_length=16, choices=Severity.choices)
+    description = models.CharField(max_length=500)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.PENDING)
+    decision_note = models.CharField(max_length=300, blank=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["status", "created_at"])]
+
+    def __str__(self):
+        return f"{self.equipment_id} {self.category} ({self.status})"
