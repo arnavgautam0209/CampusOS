@@ -30,6 +30,7 @@ class LoanViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     GET  /inventory/loans/?scope=all  staff: everything out or reported
     POST /inventory/loans/            {equipmentId, quantity, days}
     POST /inventory/loans/{id}/return/ {condition: ok|damaged|missing, note}
+    POST /inventory/loans/{id}/approve/ and /reject/  admin: {note}
     """
 
     serializer_class = LoanSerializer
@@ -38,7 +39,7 @@ class LoanViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         loans = EquipmentLoan.objects.select_related("equipment__lab", "user")
         if self.request.user.is_staff and self.request.query_params.get("scope") == "all":
             return loans.filter(status__in=EquipmentLoan.UNAVAILABLE_STATUSES)
-        if self.action == "return_loan" and self.request.user.is_staff:
+        if self.action in ("return_loan", "approve", "reject") and self.request.user.is_staff:
             return loans
         return loans.filter(user=self.request.user)
 
@@ -54,3 +55,13 @@ class LoanViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         loan = services.return_loan(self.get_object(), request.user,
                                     condition=data.get("condition", "ok"), note=data.get("note", ""))
         return Response(LoanSerializer(loan).data)
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        note = request.data.get("note", "") if isinstance(request.data, dict) else ""
+        return Response(LoanSerializer(services.approve_loan(self.get_object(), request.user, str(note))).data)
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        note = request.data.get("note", "") if isinstance(request.data, dict) else ""
+        return Response(LoanSerializer(services.reject_loan(self.get_object(), request.user, str(note))).data)

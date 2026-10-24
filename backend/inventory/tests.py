@@ -36,9 +36,15 @@ class InventoryTestCase(TestCase):
     def item(self, equipment_id):
         return next(i for i in self.api().get(INVENTORY).json() if i["id"] == equipment_id)
 
-    def borrow(self, equipment_id="EQ008", quantity=1, days=1, client=None):
-        return (client or self.client).post(LOANS, {"equipmentId": equipment_id, "quantity": quantity,
-                                                    "days": days}, format="json")
+    def borrow(self, equipment_id="EQ008", quantity=1, days=1, client=None, approve=True):
+        """A student's borrow is a pending request; by default an admin approves it so it's on loan."""
+        response = (client or self.client).post(LOANS, {"equipmentId": equipment_id, "quantity": quantity,
+                                                        "days": days}, format="json")
+        if approve and response.status_code == 201 and response.data["status"] == "pending":
+            approved = self.api(self.prof).post(f"{LOANS}{response.data['id']}/approve/")
+            assert approved.status_code == 200, approved.content
+            response.content = approved.content   # keep the 201, show the approved loan
+        return response
 
     def give_cert(self, user, cert_id, expires_at=None):
         UserCertification.objects.create(user=user, certification_id=cert_id, status="approved",
@@ -178,3 +184,52 @@ class ReturnTests(InventoryTestCase):
         with self.assertRaises(IntegrityError):
             EquipmentLoan.objects.create(equipment_id="EQ008", user=self.alice, quantity=0,
                                          due_at=timezone.now() + timedelta(days=1))
+
+
+class RequestApprovalTests(InventoryTestCase):
+    """Student borrow → pending request → admin approves (checkout) or rejects (nothing reserved)."""
+
+    def test_student_borrow_is_pending_and_reserves_nothing(self):
+        response = self.borrow(quantity=3, days=2, approve=False)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual((response.json()["status"], response.json()["requestedDays"]), ("pending", 2))
+        self.assertEqual(self.item("EQ008")["availableQuantity"], 25)
+
+    def test_staff_borrow_is_immediate(self):
+        self.assertEqual(self.borrow(client=self.api(self.prof), approve=False).json()["status"], "active")
+
+    def test_admin_approval_checks_out_from_approval_time(self):
+        loan = self.borrow(quantity=3, days=2, approve=False).json()
+        response = self.api(self.prof).post(f"{LOANS}{loan['id']}/approve/", {"note": "Collect from the lab"},
+                                            format="json")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual((body["status"], body["decisionNote"]), ("active", "Collect from the lab"))
+        stored = EquipmentLoan.objects.get(pk=loan["id"])
+        self.assertAlmostEqual((stored.due_at - stored.checked_out_at).total_seconds(), 2 * 86400, delta=1)
+        self.assertEqual(self.item("EQ008")["availableQuantity"], 22)
+
+    def test_rejection_with_reason_reserves_nothing(self):
+        loan = self.borrow(quantity=3, approve=False).json()
+        response = self.api(self.prof).post(f"{LOANS}{loan['id']}/reject/", {"note": "Needed for exams"},
+                                            format="json")
+        self.assertEqual((response.json()["status"], response.json()["decisionNote"]), ("rejected", "Needed for exams"))
+        self.assertEqual(self.item("EQ008")["availableQuantity"], 25)
+        self.assertEqual(self.api(self.prof).post(f"{LOANS}{loan['id']}/approve/").status_code, 400)
+
+    def test_students_cannot_approve_or_reject(self):
+        loan = self.borrow(approve=False).json()
+        self.assertEqual(self.client.post(f"{LOANS}{loan['id']}/approve/").status_code, 403)
+        self.assertEqual(self.api(self.bob).post(f"{LOANS}{loan['id']}/reject/").status_code, 404)
+        self.assertEqual(EquipmentLoan.objects.get(pk=loan["id"]).status, "pending")
+
+    def test_approval_cannot_over_allocate(self):
+        # EQ005 has 15 units; two students each request 10. Only one can be approved.
+        Equipment.objects.filter(pk="EQ005").update(is_available=True)
+        first = self.borrow("EQ005", quantity=10, approve=False).json()
+        second = self.borrow("EQ005", quantity=10, client=self.api(self.bob), approve=False).json()
+        self.assertEqual(self.api(self.prof).post(f"{LOANS}{first['id']}/approve/").status_code, 200)
+        response = self.api(self.prof).post(f"{LOANS}{second['id']}/approve/")
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Only 5", response.json()["detail"])
+        self.assertEqual(EquipmentLoan.objects.get(pk=second["id"]).status, "pending")

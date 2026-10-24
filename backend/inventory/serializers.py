@@ -41,12 +41,19 @@ class LoanSerializer(serializers.ModelSerializer):
     dueAt = serializers.DateTimeField(source="due_at", read_only=True)
     returnedAt = serializers.DateTimeField(source="returned_at", read_only=True)
     isOverdue = serializers.BooleanField(source="is_overdue", read_only=True)
+    requestedDays = serializers.IntegerField(source="requested_days", read_only=True)
+    decidedBy = serializers.SerializerMethodField()
+    decisionNote = serializers.CharField(source="decision_note", read_only=True)
 
     class Meta:
         model = EquipmentLoan
         fields = ["id", "equipmentId", "equipmentName", "labName", "quantity", "status", "borrower", "username",
-                  "checkedOutAt", "dueAt", "returnedAt", "isOverdue", "condition", "note"]
+                  "checkedOutAt", "dueAt", "returnedAt", "isOverdue", "condition", "note", "requestedDays",
+                  "decidedBy", "decisionNote"]
         read_only_fields = fields
 
     def get_borrower(self, loan):
         return display_name(loan.user)
+
+    def get_decidedBy(self, loan):
+        return display_name(loan.decided_by) if loan.decided_by else None

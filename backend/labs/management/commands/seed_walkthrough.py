@@ -21,7 +21,7 @@ from rest_framework.test import APIClient
 from attendance.models import AttendanceSession, CampusCard, Classroom, ClassroomEnrollment
 from bookings.services import approve_booking, create_booking
 from devices.models import Device
-from inventory.services import checkout
+from inventory.services import approve_loan, checkout
 from safelab.models import SensorReading
 from safelab.services import record as record_reading
 from spaces.services import book_room
@@ -126,7 +126,7 @@ class Command(BaseCommand):
             client.post("/api/v1/devices/scan/", {"uid": "D1D1D1D1", "labId": CHECK_IN_LAB}, format="json")
         # AssetX: two Arduino boards on loan; SafeLab: a short history of simulated readings.
         try:
-            checkout(student, "EQ008", quantity=2, days=3)
+            approve_loan(checkout(student, "EQ008", quantity=2, days=3), faculty, note="Approved for the demo")
         except APIException:
             self.stdout.write("Not enough Arduino boards in stock, so the demo skips the loan.")
         # SpacePulse: a study-room booking later today (or tomorrow morning if it's late).

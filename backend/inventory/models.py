@@ -10,6 +10,8 @@ class EquipmentLoan(models.Model):
     """Units of one equipment item borrowed by a user. AssetX's record of who has what."""
 
     class Status(models.TextChoices):
+        PENDING = "pending", "Requested, waiting for approval"
+        REJECTED = "rejected", "Request rejected"
         ACTIVE = "active", "Out on loan"
         RETURNED = "returned", "Returned"
         REPORTED = "reported", "Returned damaged or missing"
@@ -34,6 +36,12 @@ class EquipmentLoan(models.Model):
                                     related_name="+")
     condition = models.CharField(max_length=16, choices=Condition.choices, blank=True)
     note = models.CharField(max_length=300, blank=True)
+    # Student requests: the loan length asked for, and the admin's decision.
+    requested_days = models.PositiveIntegerField(default=1)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=300, blank=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
     resolved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
                                     related_name="+")
