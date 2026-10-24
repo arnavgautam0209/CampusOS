@@ -83,6 +83,22 @@ struct PreviewSafeLabService: SafeLabService {
     func acknowledge(alertID: Int) async throws {}
 }
 
+struct PreviewSpacesService: SpacesService {
+    func fetchAvailability(date: String) async throws -> SpaceAvailability {
+        SpaceAvailability(date: date, dayStart: Date(), dayEnd: Date().addingTimeInterval(12 * 3600), rooms: [])
+    }
+
+    func fetchMyBookings() async throws -> [RoomBooking] { [] }
+    func fetchUtilization() async throws -> [RoomUsage] { [] }
+
+    func book(roomId: String, start: Date, minutes: Int, attendees: Int, purpose: String) async throws -> RoomBooking {
+        throw APIError.notFound("Not available in previews.")
+    }
+
+    func cancel(id: UUID) async throws -> RoomBooking { throw APIError.notFound("Not available in previews.") }
+    func checkIn(id: UUID) async throws -> RoomBooking { throw APIError.notFound("Not available in previews.") }
+}
+
 extension View {
     @MainActor
     func previewEnvironment() -> some View {
@@ -95,6 +111,7 @@ extension View {
             .environmentObject(PlannerStore(service: PreviewPlannerService()))
             .environmentObject(InventoryStore(service: PreviewInventoryService()))
             .environmentObject(SafeLabStore(service: PreviewSafeLabService()))
+            .environmentObject(SpacesStore(service: PreviewSpacesService()))
     }
 }
 #endif

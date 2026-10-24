@@ -76,6 +76,18 @@ final class WalkthroughUITests: XCTestCase {
         shot("safelab")
         back()
 
+        // SpacePulse
+        openCard("SpacePulse")
+        waitFor("Study Room A1", timeout: 15)
+        shot("spacepulse")
+        app.swipeUp()
+        shot("spacepulse-rooms")
+        tapButton("Study Room A2")
+        waitFor("Start Time", timeout: 10)
+        shot("spacepulse-book")
+        tapButton("Cancel")
+        back()
+
         // Bookings tab
         tab("Bookings")
         waitFor("AI & Computing Lab")
