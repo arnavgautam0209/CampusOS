@@ -87,3 +87,20 @@ class MyAttendanceSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendanceRecord
         fields = ["id", "sessionId", "session", "classroomId", "classroomName", "source", "markedAt"]
+
+
+class SessionSummarySerializer(serializers.ModelSerializer):
+    """A row in the faculty session list; the full report comes from /report/."""
+    classroomId = serializers.CharField(source="classroom_id", read_only=True)
+    classroomName = serializers.CharField(source="classroom.name", read_only=True)
+    openedBy = serializers.SerializerMethodField()
+    openedAt = serializers.DateTimeField(source="opened_at", read_only=True)
+    closedAt = serializers.DateTimeField(source="closed_at", read_only=True)
+    presentCount = serializers.IntegerField(source="present_count", read_only=True)
+
+    class Meta:
+        model = AttendanceSession
+        fields = ["id", "title", "classroomId", "classroomName", "openedBy", "openedAt", "closedAt", "presentCount"]
+
+    def get_openedBy(self, session):
+        return display_name(session.opened_by) if session.opened_by else None

@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from rest_framework.exceptions import APIException
 
 from . import services
-from .models import AttendanceRecord, AttendanceSession, CampusCard, Classroom
+from .models import AttendanceRecord, AttendanceSession, CampusCard, Classroom, ClassroomEnrollment
 
 
 @admin.register(Classroom)
@@ -17,6 +17,15 @@ class CampusCardAdmin(admin.ModelAdmin):
     list_filter = ["is_active"]
     search_fields = ["uid", "user__username", "user__first_name", "user__last_name"]
     autocomplete_fields = ["user"]
+
+
+@admin.register(ClassroomEnrollment)
+class ClassroomEnrollmentAdmin(admin.ModelAdmin):
+    """The class roster used by attendance reports. End an enrollment with "Left at" instead of deleting it."""
+    list_display = ["roll_number", "student", "classroom", "enrolled_at", "left_at"]
+    list_filter = ["classroom", ("left_at", admin.EmptyFieldListFilter)]
+    search_fields = ["roll_number", "student__username", "student__first_name", "student__last_name"]
+    autocomplete_fields = ["student"]
 
 
 class AttendanceRecordInline(admin.TabularInline):

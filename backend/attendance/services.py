@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
 
-from .models import AttendanceRecord, AttendanceSession, CampusCard, Classroom
+from .models import AttendanceRecord, AttendanceSession, CampusCard, Classroom, ClassroomEnrollment
 
 
 def normalize_uid(raw):
@@ -18,6 +18,13 @@ def normalize_uid(raw):
 
 def display_name(user):
     return user.get_full_name() or user.get_username()
+
+
+def roll_number_for(student, classroom_id):
+    """The student's roll number on that classroom's roster, or their username if they aren't enrolled."""
+    enrollment = ClassroomEnrollment.objects.filter(
+        classroom_id=classroom_id, student=student, left_at__isnull=True).only("roll_number").first()
+    return enrollment.roll_number if enrollment else student.get_username()
 
 
 def open_session_for(classroom_id):

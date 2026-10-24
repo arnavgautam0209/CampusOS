@@ -2,6 +2,7 @@ from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 # RC522/PN532 UIDs are 4, 7 or 10 bytes, stored as uppercase hex without separators.
 UID_PATTERN = r"^(?:[0-9A-F]{8}|[0-9A-F]{14}|[0-9A-F]{20})$"
@@ -54,6 +55,34 @@ class CampusCard(models.Model):
     def save(self, *args, **kwargs):
         self.uid = self.uid.upper()
         super().save(*args, **kwargs)
+
+
+class ClassroomEnrollment(models.Model):
+    """
+    A student on a classroom's roster, with the roll number used in reports.
+    Leaving sets left_at instead of deleting, so past sessions keep their roster.
+    Owning a card or having attended never enrolls anyone.
+    """
+
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name="enrollments")
+    student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="enrollments")
+    roll_number = models.CharField(max_length=32)
+    enrolled_at = models.DateTimeField(default=timezone.now)
+    left_at = models.DateTimeField(null=True, blank=True, help_text="Set when the student leaves the class.")
+
+    class Meta:
+        ordering = ["classroom_id", "roll_number"]
+        constraints = [
+            models.UniqueConstraint(fields=["classroom", "student"], condition=Q(left_at__isnull=True),
+                                    name="one_current_enrollment_per_student",
+                                    violation_error_message="This student is already enrolled in this classroom."),
+            models.UniqueConstraint(fields=["classroom", "roll_number"], condition=Q(left_at__isnull=True),
+                                    name="unique_current_roll_number",
+                                    violation_error_message="Another student in this classroom has that roll number."),
+        ]
+
+    def __str__(self):
+        return f"{self.roll_number} {self.student} in {self.classroom_id}"
 
 
 class AttendanceSession(models.Model):

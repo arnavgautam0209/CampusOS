@@ -18,7 +18,7 @@ from django.utils import timezone
 from rest_framework.exceptions import APIException
 from rest_framework.test import APIClient
 
-from attendance.models import AttendanceSession, CampusCard, Classroom
+from attendance.models import AttendanceSession, CampusCard, Classroom, ClassroomEnrollment
 from bookings.services import approve_booking, create_booking
 from devices.models import Device
 from inventory.services import checkout
@@ -43,7 +43,10 @@ PEOPLE = [
     ("faculty", "Meera", "Iyer", True, None),
     ("kabir", "Kabir", "Rao", False, "D2D2D2D2"),
     ("sara", "Sara", "Khan", False, "D3D3D3D3"),
+    ("ananya", "Ananya", "Das", False, "D4D4D4D4"),   # enrolled, never taps: absent in the report
 ]
+# DEMO-ROOM roster for the attendance report: (person, roll number).
+ROSTER = [("student", "DEMO01"), ("kabir", "DEMO02"), ("sara", "DEMO03"), ("ananya", "DEMO04")]
 # Taps sent by the demo reader: two classmates, an unknown card, the student, a repeat.
 TAPS = ["D2D2D2D2", "D3D3D3D3", "DEADBEEF", "D1D1D1D1", "D2D2D2D2"]
 
@@ -98,6 +101,9 @@ class Command(BaseCommand):
                 continue
 
         Classroom.objects.create(id=ROOM_ID, name=ROOM_NAME)
+        for key, roll in ROSTER:
+            ClassroomEnrollment.objects.create(classroom_id=ROOM_ID, student=users[key], roll_number=roll,
+                                               enrolled_at=timezone.now() - timedelta(days=1))
         reader = Device.objects.create(id=READER_ID, name="Demo card reader", classroom_id=ROOM_ID)
         AttendanceSession.objects.create(classroom_id=ROOM_ID, title=SESSION_TITLE, opened_by=faculty)
         client = APIClient(HTTP_HOST="localhost")

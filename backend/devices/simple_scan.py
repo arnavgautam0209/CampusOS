@@ -97,7 +97,7 @@ class SimpleScanView(APIView):
             "Attendance marked successfully" if created else "Attendance already marked",
             created=created,
             student=attendance.display_name(student),
-            roll_number=student.get_username(),
+            roll_number=attendance.roll_number_for(student, classroom.id),
             classroom=classroom.id,
             card_uid=uid,
             session=scan.session.title,

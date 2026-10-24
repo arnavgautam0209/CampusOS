@@ -8,7 +8,8 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from attendance.models import AttendanceRecord, CampusCard, Classroom
+from attendance.models import AttendanceRecord, AttendanceSession, CampusCard, Classroom
+from attendance.reports import build_report
 from bookings.models import Booking
 from devices.models import Device
 from inventory.models import EquipmentLoan
@@ -68,8 +69,10 @@ class WalkthroughSeedTests(TestCase):
     def test_seed_then_clean_leaves_nothing_behind(self):
         with mock.patch.dict(os.environ, {"CAMPUSOS_WALKTHROUGH_PASSWORD": "unused-test-pw"}):
             call_command("seed_walkthrough", stdout=StringIO())
-        self.assertEqual(get_user_model().objects.filter(username__startswith="demo_ui_").count(), 4)
+        self.assertEqual(get_user_model().objects.filter(username__startswith="demo_ui_").count(), 5)
         self.assertEqual(AttendanceRecord.objects.filter(session__classroom_id="DEMO-ROOM").count(), 3)
+        demo_report = build_report(AttendanceSession.objects.get(classroom_id="DEMO-ROOM"))
+        self.assertEqual((len(demo_report.present), len(demo_report.absent)), (3, 1))
         self.assertTrue(Device.objects.get(pk="READER-DEMO").key_hash)
         checked_in = Booking.objects.get(user__username="demo_ui_student", lab_id="LAB001")
         self.assertIsNotNone(checked_in.checked_in_at)

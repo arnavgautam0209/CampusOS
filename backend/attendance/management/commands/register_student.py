@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from attendance.models import UID_PATTERN, CampusCard
+from attendance.models import UID_PATTERN, CampusCard, Classroom, ClassroomEnrollment
 from attendance.services import normalize_uid
 
 
@@ -16,6 +16,8 @@ class Command(BaseCommand):
         parser.add_argument("roll_number", help="e.g. ECE001 (used as the username)")
         parser.add_argument("card_uid", help="card UID from the reader, e.g. A1B2C3D4 or a1:b2:c3:d4")
         parser.add_argument("--name", default="", help='full name, e.g. "Asha Verma"')
+        parser.add_argument("--classroom", default="",
+                            help="also enroll them in this classroom (e.g. ECE) so they appear in its reports")
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -45,6 +47,22 @@ class Command(BaseCommand):
         else:
             CampusCard.objects.create(uid=uid, user=student)
 
+        enrolled = ""
+        if options["classroom"]:
+            enrolled = f", enrolled in {self.enroll(student, roll, options['classroom'])}"
+
         name = student.get_full_name() or roll
         self.stdout.write(self.style.SUCCESS(
-            f"{'Created' if created else 'Updated'} student {roll} ({name}) with card {uid}."))
+            f"{'Created' if created else 'Updated'} student {roll} ({name}) with card {uid}{enrolled}."))
+
+    def enroll(self, student, roll, classroom_id):
+        classroom = Classroom.objects.filter(pk__iexact=classroom_id.strip()).first()
+        if classroom is None:
+            raise CommandError(f"Unknown classroom {classroom_id}.")
+        current = ClassroomEnrollment.objects.filter(classroom=classroom, left_at__isnull=True)
+        taken = current.filter(roll_number=roll).exclude(student=student).select_related("student").first()
+        if taken:
+            raise CommandError(f"Roll number {roll} in {classroom.id} belongs to {taken.student.get_username()}.")
+        if not current.filter(student=student).exists():
+            ClassroomEnrollment.objects.create(classroom=classroom, student=student, roll_number=roll)
+        return classroom.id
