@@ -42,6 +42,7 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - Home with Campus AI Planner card and six service modules; tabs: Home, Bookings, AI Planner, Profile
 - Sign-in with Django token auth; token stored in the Keychain; editable server address
 - LabOS (**live backend data**): lab catalogue and equipment from `/api/v1/labs/`; reservations (30 min / 1 h / 2 h) and cancellation through `/api/v1/bookings/`, with loading, error and retry states. Conflicts are checked by the server across all users
+- Lab booking approval: students' lab bookings are sent as requests (with a purpose) and show "Waiting for faculty approval"; faculty see "Lab Requests to Review" in Bookings with Approve and Decline (with a reason); declined and expired requests are listed under "Not Approved"
 - Lab check-in: tapping a card on a lab's door reader checks the student in to their booking; Bookings shows "Tap your card at the lab door" when check-in opens and "Checked in at 10:02 · in use until 11:00" afterwards (refreshes every 5 s while open)
 - SkillPass faculty review: staff see **Requests to Review** on the SkillPass screen and approve or decline with one tap (self-approval is refused by the server)
 - SkillPass (**live backend data**): your certifications with status and expiry, available training with a **Request Training** / **Request Renewal** button; lab details list required certifications with your standing, and equipment shows its own requirements
@@ -58,6 +59,7 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - SpacePulse: room availability and bookings with server-side overlap, capacity and permission checks, check-in and no-show release, staff utilization
 - AI planner: `/api/v1/ai/planner/` (Claude Opus 5.5 extraction + deterministic matching; set `ANTHROPIC_API_KEY` to enable Claude)
 - SkillPass: certifications with faculty approval, expiry and revocation; restricted labs refuse bookings (403) without the required certification
+- Lab booking approval: per-lab `requiresApproval`, pending requests that hold the slot, staff approve/decline (no self-approval, SkillPass re-checked), auto-expiry at the start time, door readers deny pending requests
 - Lab check-in: lab door readers validate the student's booking and SkillPass certifications, answer granted/denied, and record the actual session start
 - Attendance: ESP32 readers POST card taps to `/api/v1/devices/scan/` with a device key. Attendance is marked only while faculty have a session open in that room, with duplicate protection and a log of every scan
 

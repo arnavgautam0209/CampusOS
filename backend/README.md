@@ -35,10 +35,11 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | GET | `/api/v1/auth/me/` | token | Signed-in user `{id, name, email, role}` (same shape as iOS `CampusUser`) |
 | GET | `/api/v1/labs/` | public | Labs with equipment (same JSON shape as iOS `Lab`, plus `requiredCertifications`) |
 | GET | `/api/v1/labs/{id}/` | public | One lab |
-| GET | `/api/v1/bookings/` | token | Your bookings (staff see all) |
-| POST | `/api/v1/bookings/` | token | `{labID, start (ISO 8601), durationMinutes}` |
-| GET | `/api/v1/bookings/{id}/` | token | One of your bookings |
-| POST | `/api/v1/bookings/{id}/cancel/` | token | Cancel an active, unfinished booking |
+| GET | `/api/v1/bookings/` | token | Your bookings; staff add `?scope=pending` (requests to review, soonest first) or `?scope=all` |
+| POST | `/api/v1/bookings/` | token | `{labID, start (ISO 8601), durationMinutes, purpose?}`; a student booking for a lab with `requiresApproval` comes back `pending` |
+| GET | `/api/v1/bookings/{id}/` | token | One of your bookings (staff: any) |
+| POST | `/api/v1/bookings/{id}/cancel/` | token | Cancel a confirmed booking or withdraw a pending request |
+| POST | `/api/v1/bookings/{id}/approve/`, `/decline/` | staff | `{note?}`; approve re-checks SkillPass; you can't approve your own request |
 | POST | `/api/v1/devices/scan/` | device key | Card tap from a reader: classroom attendance (`classroomId`) or lab check-in (`labId`). See [firmware/README.md](../firmware/README.md) for the full contract |
 | GET | `/api/v1/attendance/live/` | staff | Open sessions with who's present, readers, and the latest 25 scans (polled by the app) |
 | GET | `/api/v1/attendance/mine/` | token | Your attendance records, newest first |
@@ -72,6 +73,7 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - The overlap check and insert happen inside one transaction that locks the lab row (`bookings/services.py`).
 - A database constraint requires `end > start`.
 - Cancelled bookings are kept with `status=cancelled` for history and no longer block the slot.
+- Faculty approval: labs have `requires_approval` (on by default; switch it off per lab in the admin). A student's booking for such a lab is `pending` and holds the slot so nobody else can take it while faculty decide. Faculty (staff) approve (`active`, "Approved by …") or decline with a reason (`declined`, slot freed). Requests nobody decided become `expired` at their start time. Staff bookings are confirmed straight away. The door reader denies a pending request with `awaiting_approval`.
 - **Known limit:** SQLite ignores row locks. Use PostgreSQL before several people share one server.
 
 ## SkillPass rules
