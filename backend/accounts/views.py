@@ -17,6 +17,7 @@ def me(request):
     user = request.user
     return Response({
         "id": str(user.pk),
+        "username": user.get_username(),
         "name": user.get_full_name() or user.get_username(),
         "email": user.email,
         "role": campus_role(user),

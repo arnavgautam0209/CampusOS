@@ -38,7 +38,8 @@ class AuthApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"id": str(self.user.pk), "name": "Alice Rao", "email": "alice@example.edu", "role": "student"},
+            {"id": str(self.user.pk), "username": "alice", "name": "Alice Rao", "email": "alice@example.edu",
+             "role": "student"},
         )
 
     def test_invalid_token_is_401(self):

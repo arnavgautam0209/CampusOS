@@ -146,6 +146,7 @@ class CertificationApiTests(SkillPassTestCase):
 
         pending = self.faculty_client.get("/api/v1/certification-records/?status=pending").json()
         self.assertEqual([r["id"] for r in pending], [record_id])
+        self.assertEqual((pending[0]["username"], pending[0]["studentName"]), ("student", "student"))
 
         response = self.faculty_client.post(f"/api/v1/certification-records/{record_id}/approve/")
         self.assertEqual(response.status_code, 200)

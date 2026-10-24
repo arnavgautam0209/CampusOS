@@ -14,6 +14,7 @@ class CertificationSerializer(serializers.ModelSerializer):
 class UserCertificationSerializer(serializers.ModelSerializer):
     certification = CertificationSerializer(read_only=True)
     username = serializers.CharField(source="user.get_username", read_only=True)
+    studentName = serializers.SerializerMethodField()
     requestedAt = serializers.DateTimeField(source="requested_at", read_only=True)
     approvedBy = serializers.SerializerMethodField()
     approvedAt = serializers.DateTimeField(source="approved_at", read_only=True)
@@ -22,8 +23,11 @@ class UserCertificationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserCertification
-        fields = ["id", "username", "certification", "status", "isValid",
+        fields = ["id", "username", "studentName", "certification", "status", "isValid",
                   "requestedAt", "approvedBy", "approvedAt", "expiresAt"]
+
+    def get_studentName(self, record):
+        return record.user.get_full_name() or record.user.get_username()
 
     def get_approvedBy(self, record):
         return record.approved_by.get_username() if record.approved_by else None
