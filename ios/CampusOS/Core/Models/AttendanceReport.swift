@@ -123,13 +123,22 @@ final class AttendanceReportStore: ObservableObject {
     @Published private(set) var report: SessionReport?
     @Published private(set) var reportState: LoadState = .idle
     @Published private(set) var isExporting = false
+    /// Usernames that turned present in the last few seconds of a provisional report.
+    @Published private(set) var newlyPresent: Set<String> = []
+
+    /// A provisional report refreshes this often, so a card tap shows up about a second later.
+    nonisolated static let pollInterval: Duration = .seconds(1)
 
     private let service: AttendanceReportService
     private let fileManager: FileManager
+    private let now: () -> Date
+    private var presentSeen = RecentArrivals<String>()
 
-    init(service: AttendanceReportService, fileManager: FileManager = .default) {
+    init(service: AttendanceReportService, fileManager: FileManager = .default,
+         now: @escaping () -> Date = Date.init) {
         self.service = service
         self.fileManager = fileManager
+        self.now = now
     }
 
     func loadSessions() async {
@@ -143,17 +152,33 @@ final class AttendanceReportStore: ObservableObject {
     }
 
     func loadReport(sessionId: Int) async {
-        if report?.session.id != sessionId {
+        let sameSession = report?.session.id == sessionId
+        if !sameSession {
             report = nil
             reportState = .loading
+            presentSeen = RecentArrivals()
         }
         do {
             let next = try await service.fetchReport(sessionId: sessionId)
+            // Highlight students who tapped in while this report was on screen, not those already present.
+            newlyPresent = presentSeen.update(next.presentStudents.map(\.username), firstLoad: !sameSession,
+                                              now: now())
             report = next
             reportState = .loaded
         } catch {
             // A refresh that fails keeps the last good report on screen.
             reportState = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Loads the report, then keeps refreshing while it's provisional (session still open)
+    /// until the calling task is cancelled. Closed sessions are loaded once.
+    func pollReport(sessionId: Int, every interval: Duration = AttendanceReportStore.pollInterval) async {
+        await loadReport(sessionId: sessionId)
+        while !Task.isCancelled, report?.session.id == sessionId, report?.session.isFinal == false {
+            try? await Task.sleep(for: interval)
+            if Task.isCancelled { break }
+            await loadReport(sessionId: sessionId)
         }
     }
 
@@ -185,5 +210,7 @@ final class AttendanceReportStore: ObservableObject {
         sessionsState = .idle
         report = nil
         reportState = .idle
+        newlyPresent = []
+        presentSeen = RecentArrivals()
     }
 }

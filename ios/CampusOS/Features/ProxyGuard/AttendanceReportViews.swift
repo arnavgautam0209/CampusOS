@@ -89,15 +89,8 @@ struct SessionReportView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: sessionId) {
-            await reports.loadReport(sessionId: sessionId)
-            // An open session's report is provisional: keep it current while it's on screen.
-            while !Task.isCancelled, reports.report?.session.isFinal == false {
-                try? await Task.sleep(for: .seconds(5))
-                if Task.isCancelled { break }
-                await reports.loadReport(sessionId: sessionId)
-            }
-        }
+        // An open session's report is provisional: it refreshes every second while on screen.
+        .task(id: sessionId) { await reports.pollReport(sessionId: sessionId) }
         .quickLookPreview($previewURL)
         .alert("Couldn't Create the PDF", isPresented: Binding(
             get: { exportError != nil }, set: { if !$0 { exportError = nil } })
@@ -119,18 +112,31 @@ struct SessionReportView: View {
                 }
             }
 
+            let justTapped = report.presentStudents.filter { reports.newlyPresent.contains($0.username) }
+            if !justTapped.isEmpty {
+                Section {
+                    ForEach(justTapped) { student in
+                        StudentRow(student: student, present: true, isNew: true)
+                            .listRowBackground(Color.green.opacity(0.18))
+                    }
+                } header: {
+                    Label("Just Marked Present", systemImage: "wave.3.right")
+                }
+            }
+
             Section("Attendance Summary") {
                 SummaryGrid(summary: report.summary)
+                    .animation(.default, value: report.summary)
             }
 
             Section {
                 NavigationLink {
-                    StudentListView(title: "Present Students", students: report.presentStudents, present: true)
+                    StudentListView(sessionId: sessionId, present: true)
                 } label: {
                     Label("View Present Students (\(report.summary.present))", systemImage: "person.fill.checkmark")
                 }
                 NavigationLink {
-                    StudentListView(title: "Absent Students", students: report.absentStudents, present: false)
+                    StudentListView(sessionId: sessionId, present: false)
                 } label: {
                     Label("View Absent Students (\(report.summary.absent))", systemImage: "person.fill.xmark")
                 }
@@ -234,10 +240,18 @@ private struct SummaryGrid: View {
     }
 }
 
+/// Present or absent students of one session. Reads the store and keeps polling, so a student
+/// who taps in while this list is open moves to Present (and off Absent) within a second.
 private struct StudentListView: View {
-    let title: String
-    let students: [SessionReport.Student]
+    let sessionId: Int
     let present: Bool
+
+    @EnvironmentObject private var reports: AttendanceReportStore
+
+    private var students: [SessionReport.Student] {
+        guard let report = reports.report, report.session.id == sessionId else { return [] }
+        return present ? report.presentStudents : report.absentStudents
+    }
 
     var body: some View {
         List {
@@ -246,25 +260,34 @@ private struct StudentListView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(students.enumerated()), id: \.element.id) { index, student in
+                let isNew = present && reports.newlyPresent.contains(student.username)
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary)
-                    StudentRow(student: student, present: present)
+                    StudentRow(student: student, present: present, isNew: isNew)
                 }
+                .listRowBackground(isNew ? Color.green.opacity(0.18) : nil)
             }
         }
-        .navigationTitle(title)
+        .animation(.default, value: students)
+        .navigationTitle(present ? "Present Students" : "Absent Students")
+        // The report screen's refresh stops while this one is pushed, so keep it going here.
+        .task(id: sessionId) { await reports.pollReport(sessionId: sessionId) }
     }
 }
 
 private struct StudentRow: View {
     let student: SessionReport.Student
     let present: Bool
+    var isNew = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(student.name).font(.headline)
                 Spacer()
+                if isNew {
+                    StatusBadge(text: "Just tapped", color: .green)
+                }
                 StatusBadge(text: present ? "PRESENT" : "ABSENT", color: present ? .green : .red)
             }
             Text(student.rollNumber.isEmpty ? student.username : student.rollNumber)

@@ -137,6 +137,83 @@ struct AttendanceReportStoreTests {
         await #expect(throws: APIError.badResponse) { try await store.exportPDF(sessionId: 14) }
     }
 
+    // MARK: Live updates
+
+    private func provisional(present: [String], absent: [String], final: Bool = false) throws -> SessionReport {
+        var report = try decodeReport()
+        let student = { (name: String, here: Bool) in
+            SessionReport.Student(rollNumber: name.uppercased(), name: name, username: name,
+                                  status: here ? "present" : "absent", markedAt: here ? Date() : nil,
+                                  source: here ? .card : nil, cardUid: nil)
+        }
+        report = SessionReport(
+            session: .init(id: 17, title: "Embedded Systems Lecture 02", openedAt: report.session.openedAt,
+                           closedAt: final ? Date() : nil, status: final ? "final" : "provisional"),
+            classroom: report.classroom, faculty: report.faculty,
+            summary: .init(totalStudents: present.count + absent.count, present: present.count, absent: absent.count,
+                           attendancePercentage: nil),
+            presentStudents: present.map { student($0, true) }, absentStudents: absent.map { student($0, false) },
+            generatedAt: report.generatedAt)
+        return report
+    }
+
+    @Test func studentWhoTapsWhileReportIsOpenIsHighlighted() async throws {
+        service.reports = [.success(try provisional(present: ["riya"], absent: ["aarav"])),
+                           .success(try provisional(present: ["aarav", "riya"], absent: [])),
+                           .success(try provisional(present: ["aarav", "riya"], absent: []))]
+        let clock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
+        let store = AttendanceReportStore(service: service, now: { clock.now })
+
+        await store.loadReport(sessionId: 17)
+        #expect(store.newlyPresent.isEmpty)   // riya was already present when the report opened
+        clock.advance(1)
+        await store.loadReport(sessionId: 17)
+        #expect(store.newlyPresent == ["aarav"])
+        #expect(store.report?.absentStudents.isEmpty == true)
+        clock.advance(AttendanceStore.highlightDuration)
+        await store.loadReport(sessionId: 17)
+        #expect(store.newlyPresent.isEmpty)
+    }
+
+    @Test func openingAnotherSessionDoesNotHighlightItsStudents() async throws {
+        let other = try decodeReport()   // session 14
+        service.reports = [.success(try provisional(present: [], absent: ["aarav"])), .success(other)]
+        let store = AttendanceReportStore(service: service)
+        await store.loadReport(sessionId: 17)
+        await store.loadReport(sessionId: 14)
+        #expect(store.newlyPresent.isEmpty)
+    }
+
+    @Test func pollingRefreshesAProvisionalReportUntilItIsFinal() async throws {
+        service.reports = [.success(try provisional(present: [], absent: ["aarav"])),
+                           .success(try provisional(present: ["aarav"], absent: [])),
+                           .success(try provisional(present: ["aarav"], absent: [], final: true))]
+        let store = AttendanceReportStore(service: service)
+        await store.pollReport(sessionId: 17, every: .milliseconds(5))   // returns once the report is final
+        #expect(service.reportRequests == [17, 17, 17])
+        #expect(store.report?.session.isFinal == true)
+    }
+
+    @Test func closedSessionIsLoadedOnce() async throws {
+        service.reports = [.success(try decodeReport())]
+        let store = AttendanceReportStore(service: service)
+        await store.pollReport(sessionId: 14, every: .milliseconds(5))
+        #expect(service.reportRequests == [14])
+    }
+
+    @Test func pollingStopsWhenCancelled() async throws {
+        service.reports = [.success(try provisional(present: [], absent: ["aarav"]))]
+        let store = AttendanceReportStore(service: service)
+        let task = Task { await store.pollReport(sessionId: 17, every: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(80))
+        task.cancel()
+        await task.value
+        let count = service.reportRequests.count
+        #expect(count > 1)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(service.reportRequests.count == count)
+    }
+
     @Test func resetClearsEverything() async throws {
         service.reports = [.success(try decodeReport())]
         let store = AttendanceReportStore(service: service)

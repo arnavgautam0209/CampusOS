@@ -75,20 +75,66 @@ struct AttendanceStoreTests {
         #expect(store.lastUpdated == t0)
     }
 
-    @Test func newTapsAreHighlightedOnNextRefresh() async {
-        service.liveResponses = [
-            .success(live(scans: [scan(1)])),
-            .success(live(scans: [scan(3, .unknownCard, student: nil), scan(2), scan(1)])),
-            .success(live(scans: [scan(3, .unknownCard, student: nil), scan(2), scan(1)])),
-        ]
-        let store = makeStore()
+    @Test func newTapsStayHighlightedForAFewSeconds() async {
+        let both = live(scans: [scan(3, .unknownCard, student: nil), scan(2), scan(1)])
+        service.liveResponses = [.success(live(scans: [scan(1)])), .success(both), .success(both), .success(both)]
+        let clock = TestClock(t0)
+        let store = AttendanceStore(service: service, now: { clock.now })
 
         await store.refreshLive()
+        clock.advance(1)
         await store.refreshLive()
         #expect(store.newScanIDs == [2, 3])
 
+        // The next 1-second refreshes keep them highlighted…
+        clock.advance(1)
+        await store.refreshLive()
+        #expect(store.newScanIDs == [2, 3])
+
+        // …until the highlight time has passed.
+        clock.advance(AttendanceStore.highlightDuration)
         await store.refreshLive()
         #expect(store.newScanIDs.isEmpty)
+    }
+
+    @Test func refreshesEverySecond() {
+        #expect(AttendanceStore.pollInterval == .seconds(1))
+        #expect(AttendanceReportStore.pollInterval == .seconds(1))
+        #expect(AttendanceStore.highlightDuration > 1)
+    }
+
+    @Test func studentWhoJustTappedIsHighlightedInOpenSession() async {
+        let empty = liveSession(7)
+        let tapped = LiveSession(id: 7, title: "Lecture 7", classroomId: "ROOM-101", classroomName: "ROOM-101",
+                                 openedBy: "Priya Nair", openedAt: t0, closedAt: nil,
+                                 records: [SessionAttendee(id: 41, student: "Aarav Sharma", studentUsername: "ECE001",
+                                                           source: .card, markedAt: t0.addingTimeInterval(2),
+                                                           deviceId: "READER-ECE")])
+        service.liveResponses = [.success(live(scans: [], sessions: [empty])),
+                                 .success(live(scans: [], sessions: [tapped])),
+                                 .success(live(scans: [], sessions: [tapped]))]
+        let clock = TestClock(t0)
+        let store = AttendanceStore(service: service, now: { clock.now })
+
+        await store.refreshLive()
+        #expect(store.newAttendeeIDs.isEmpty)
+        clock.advance(1)
+        await store.refreshLive()
+        #expect(store.newAttendeeIDs == [41])
+        clock.advance(AttendanceStore.highlightDuration + 1)
+        await store.refreshLive()
+        #expect(store.newAttendeeIDs.isEmpty)
+    }
+
+    @Test func studentsAlreadyPresentOnFirstLoadAreNotHighlighted() async {
+        let session = LiveSession(id: 7, title: "Lecture 7", classroomId: "ROOM-101", classroomName: "ROOM-101",
+                                  openedBy: nil, openedAt: t0, closedAt: nil,
+                                  records: [SessionAttendee(id: 41, student: "Aarav Sharma", studentUsername: "ECE001",
+                                                            source: .card, markedAt: t0, deviceId: nil)])
+        service.liveResponses = [.success(live(scans: [], sessions: [session]))]
+        let store = makeStore()
+        await store.refreshLive()
+        #expect(store.newAttendeeIDs.isEmpty)
     }
 
     @Test func failedRefreshKeepsLastGoodData() async {
@@ -311,5 +357,33 @@ struct AttendanceDecodingTests {
         #expect(!CampusRole.student.isStaff)
         #expect(CampusRole.faculty.isStaff)
         #expect(CampusRole.administrator.isStaff)
+    }
+}
+
+/// A clock tests can move forward.
+final class TestClock: @unchecked Sendable {
+    private(set) var now: Date
+    init(_ start: Date) { now = start }
+    func advance(_ seconds: TimeInterval) { now = now.addingTimeInterval(seconds) }
+}
+
+@Suite("RecentArrivals")
+struct RecentArrivalsTests {
+    @Test func firstLoadHighlightsNothingThenNewIDsLastForTheDuration() {
+        var arrivals = RecentArrivals<Int>()
+        #expect(arrivals.update([1, 2], firstLoad: true, now: t0, duration: 8).isEmpty)
+        #expect(arrivals.update([1, 2, 3], firstLoad: false, now: t0.addingTimeInterval(1), duration: 8) == [3])
+        #expect(arrivals.update([1, 2, 3, 4], firstLoad: false, now: t0.addingTimeInterval(5), duration: 8) == [3, 4])
+        #expect(arrivals.update([1, 2, 3, 4], firstLoad: false, now: t0.addingTimeInterval(9.5), duration: 8) == [4])
+        #expect(arrivals.update([1, 2, 3, 4], firstLoad: false, now: t0.addingTimeInterval(14), duration: 8).isEmpty)
+    }
+
+    @Test func idsThatDisappearStopBeingHighlighted() {
+        var arrivals = RecentArrivals<String>()
+        _ = arrivals.update([], firstLoad: true, now: t0, duration: 8)
+        #expect(arrivals.update(["a"], firstLoad: false, now: t0, duration: 8) == ["a"])
+        #expect(arrivals.update([], firstLoad: false, now: t0.addingTimeInterval(1), duration: 8).isEmpty)
+        // Coming back later counts as a new arrival.
+        #expect(arrivals.update(["a"], firstLoad: false, now: t0.addingTimeInterval(2), duration: 8) == ["a"])
     }
 }

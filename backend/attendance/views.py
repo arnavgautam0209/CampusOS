@@ -22,7 +22,7 @@ SESSION_LIST_LIMIT = 50
 @permission_classes([IsAdminUser])
 def live(request):
     """
-    Faculty dashboard, polled by the app every few seconds:
+    Faculty dashboard, polled by the app every second:
     open sessions with who's present, readers, and the latest scans (newest first).
     """
     records = AttendanceRecord.objects.select_related("student").order_by("marked_at")

@@ -103,7 +103,9 @@ struct LiveAttendanceView: View {
                         Text("Waiting for the first card tap…").foregroundStyle(.secondary)
                     }
                     ForEach(session.records) { attendee in
-                        AttendeeRow(attendee: attendee)
+                        let isNew = store.newAttendeeIDs.contains(attendee.id)
+                        AttendeeRow(attendee: attendee, isNew: isNew)
+                            .listRowBackground(isNew ? Color.green.opacity(0.18) : nil)
                     }
                     NavigationLink {
                         SessionReportView(sessionId: session.id, title: session.title)
@@ -164,6 +166,7 @@ private struct SessionHeader: View {
 
 private struct AttendeeRow: View {
     let attendee: SessionAttendee
+    var isNew = false
 
     var body: some View {
         HStack {
@@ -171,10 +174,15 @@ private struct AttendeeRow: View {
                 .foregroundStyle(attendee.source == .card ? .indigo : .orange)
                 .accessibilityLabel(attendee.source == .card ? "Card tap" : "Added by faculty")
             Text(attendee.student)
+            if isNew {
+                StatusBadge(text: "Just tapped", color: .green)
+            }
             Spacer()
-            Text(attendee.markedAt.formatted(date: .omitted, time: .shortened))
-                .font(.caption).foregroundStyle(.secondary)
+            // Seconds matter here: it's the moment the card was tapped.
+            Text(attendee.markedAt.formatted(date: .omitted, time: .standard))
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
+        .animation(.default, value: isNew)
     }
 }
 

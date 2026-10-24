@@ -1,25 +1,32 @@
 import Foundation
 import Combine
 
-/// Live attendance for ProxyGuard. Polls the server while a screen is open so
-/// card taps on a reader show up in the app within a few seconds.
+/// Live attendance for ProxyGuard. Polls the server every second while a screen
+/// is open so a card tap on a reader shows up in the app almost at once.
 @MainActor
 final class AttendanceStore: ObservableObject {
     @Published private(set) var live: AttendanceLive?
     @Published private(set) var myRecords: [MyAttendance] = []
     @Published private(set) var loadState: LoadState = .idle
     @Published private(set) var lastUpdated: Date?
-    /// Items that arrived in the latest refresh, so the UI can highlight them.
+    /// Items that arrived in the last few seconds (not on the first load), so the UI can highlight them.
     @Published private(set) var newScanIDs: Set<Int> = []
     @Published private(set) var newRecordIDs: Set<Int> = []
+    /// Students marked present in an open session in the last few seconds (SessionAttendee ids).
+    @Published private(set) var newAttendeeIDs: Set<Int> = []
     /// True while an open/close request is in flight, to disable the buttons.
     @Published private(set) var isChangingSession = false
 
-    nonisolated static let pollInterval: Duration = .seconds(3)
+    nonisolated static let pollInterval: Duration = .seconds(1)
+    /// How long a new tap stays highlighted; longer than the poll interval so it doesn't just flash.
+    nonisolated static let highlightDuration: TimeInterval = 8
 
     private let service: AttendanceService
     private let now: () -> Date
     private var hasLoadedMine = false
+    private var scansSeen = RecentArrivals<Int>()
+    private var attendeesSeen = RecentArrivals<Int>()
+    private var recordsSeen = RecentArrivals<Int>()
 
     init(service: AttendanceService, now: @escaping () -> Date = Date.init) {
         self.service = service
@@ -30,10 +37,14 @@ final class AttendanceStore: ObservableObject {
         if live == nil { loadState = .loading }
         do {
             let next = try await service.fetchLive()
+            let time = now()
             // Nothing is "new" on the first load, only taps that arrive while watching.
-            newScanIDs = live.map { Set(next.recentScans.map(\.id)).subtracting($0.recentScans.map(\.id)) } ?? []
+            let firstLoad = live == nil
+            newScanIDs = scansSeen.update(next.recentScans.map(\.id), firstLoad: firstLoad, now: time)
+            newAttendeeIDs = attendeesSeen.update(next.openSessions.flatMap(\.records).map(\.id),
+                                                  firstLoad: firstLoad, now: time)
             live = next
-            lastUpdated = now()
+            lastUpdated = time
             loadState = .loaded
         } catch {
             // Keep showing the last good data; the UI shows a "reconnecting" banner.
@@ -45,10 +56,11 @@ final class AttendanceStore: ObservableObject {
         if !hasLoadedMine { loadState = .loading }
         do {
             let next = try await service.fetchMine()
-            newRecordIDs = hasLoadedMine ? Set(next.map(\.id)).subtracting(myRecords.map(\.id)) : []
+            let time = now()
+            newRecordIDs = recordsSeen.update(next.map(\.id), firstLoad: !hasLoadedMine, now: time)
             myRecords = next
             hasLoadedMine = true
-            lastUpdated = now()
+            lastUpdated = time
             loadState = .loaded
         } catch {
             loadState = .failed(error.localizedDescription)
@@ -90,7 +102,30 @@ final class AttendanceStore: ObservableObject {
         hasLoadedMine = false
         newScanIDs = []
         newRecordIDs = []
+        newAttendeeIDs = []
+        scansSeen = RecentArrivals<Int>()
+        attendeesSeen = RecentArrivals<Int>()
+        recordsSeen = RecentArrivals<Int>()
         lastUpdated = nil
         loadState = .idle
+    }
+}
+
+/// Remembers when each id first appeared so the UI can highlight arrivals for a few seconds.
+struct RecentArrivals<ID: Hashable> {
+    private var known: Set<ID> = []
+    private var firstSeen: [ID: Date] = [:]
+
+    /// Returns the ids that first appeared within `duration` of `now`. On the first load everything
+    /// is already there, so nothing counts as new.
+    mutating func update(_ ids: [ID], firstLoad: Bool, now: Date,
+                         duration: TimeInterval = AttendanceStore.highlightDuration) -> Set<ID> {
+        let current = Set(ids)
+        if !firstLoad {
+            for id in current.subtracting(known) { firstSeen[id] = now }
+        }
+        known = current
+        firstSeen = firstSeen.filter { current.contains($0.key) && now.timeIntervalSince($0.value) < duration }
+        return Set(firstSeen.keys)
     }
 }
