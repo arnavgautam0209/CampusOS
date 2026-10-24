@@ -5,7 +5,7 @@ import SwiftUI
 struct PreviewBookingService: BookingService {
     func fetchBookings() async throws -> [LabBooking] { [] }
 
-    func createBooking(labID: String, start: Date, durationMinutes: Int) async throws -> LabBooking {
+    func createBooking(labID: String, start: Date, durationMinutes: Int, purpose: String) async throws -> LabBooking {
         LabBooking(id: UUID(), labID: labID, labName: "Preview Lab", start: start,
                    end: start.addingTimeInterval(TimeInterval(durationMinutes * 60)), status: .active)
     }
@@ -13,6 +13,10 @@ struct PreviewBookingService: BookingService {
     func cancelBooking(id: UUID) async throws -> LabBooking {
         throw APIError.notFound("Not available in previews.")
     }
+
+    func fetchPendingReviews() async throws -> [LabBooking] { [] }
+    func approve(id: UUID, note: String) async throws -> LabBooking { throw APIError.notFound("Not available in previews.") }
+    func decline(id: UUID, note: String) async throws -> LabBooking { throw APIError.notFound("Not available in previews.") }
 }
 
 struct PreviewSkillPassService: SkillPassService {

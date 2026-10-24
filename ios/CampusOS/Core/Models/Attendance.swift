@@ -83,6 +83,7 @@ struct ReaderScan: Codable, Identifiable, Equatable {
             "too_early": "too early",
             "certification_required": "needs certification",
             "lab_closed": "lab closed",
+            "awaiting_approval": "awaiting approval",
         ][reason] ?? reason.replacingOccurrences(of: "_", with: " ")
         return "\(result.label): \(readable)"
     }

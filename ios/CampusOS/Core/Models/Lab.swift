@@ -10,6 +10,8 @@ struct Lab: Identifiable, Codable, Hashable {
     let isOpenForBooking: Bool
     /// SkillPass certification IDs a student must hold to book this lab.
     var requiredCertifications: [String] = []
+    /// Students' bookings wait for faculty approval.
+    var requiresApproval: Bool = false
 }
 
 extension Lab {
@@ -25,6 +27,7 @@ extension Lab {
         equipment = try container.decode([Equipment].self, forKey: .equipment)
         isOpenForBooking = try container.decode(Bool.self, forKey: .isOpenForBooking)
         requiredCertifications = try container.decodeIfPresent([String].self, forKey: .requiredCertifications) ?? []
+        requiresApproval = try container.decodeIfPresent(Bool.self, forKey: .requiresApproval) ?? false
     }
 }
 

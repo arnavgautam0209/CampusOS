@@ -8,19 +8,38 @@ final class FakeBookingService: BookingService {
     var fetchError: Error?
     var createError: Error?
     var cancelError: Error?
-    private(set) var createCalls: [(labID: String, start: Date, durationMinutes: Int)] = []
+    /// Status the fake server gives new bookings (.pending for labs that need approval).
+    var createdStatus: LabBooking.Status = .active
+    var pending: [LabBooking] = []
+    var reviewError: Error?
+    private(set) var createCalls: [(labID: String, start: Date, durationMinutes: Int, purpose: String)] = []
     private(set) var cancelledIDs: [UUID] = []
+    private(set) var decisions: [(id: UUID, action: String, note: String)] = []
 
     func fetchBookings() async throws -> [LabBooking] {
         if let fetchError { throw fetchError }
         return storedBookings
     }
 
-    func createBooking(labID: String, start: Date, durationMinutes: Int) async throws -> LabBooking {
-        createCalls.append((labID, start, durationMinutes))
+    func createBooking(labID: String, start: Date, durationMinutes: Int, purpose: String) async throws -> LabBooking {
+        createCalls.append((labID, start, durationMinutes, purpose))
         if let createError { throw createError }
         return LabBooking(id: UUID(), labID: labID, labName: "Lab \(labID)", start: start,
-                          end: start.addingTimeInterval(TimeInterval(durationMinutes * 60)), status: .active)
+                          end: start.addingTimeInterval(TimeInterval(durationMinutes * 60)), status: createdStatus,
+                          purpose: purpose)
+    }
+
+    func fetchPendingReviews() async throws -> [LabBooking] { pending }
+
+    func approve(id: UUID, note: String) async throws -> LabBooking { try decide(id, "approve", note, .active) }
+    func decline(id: UUID, note: String) async throws -> LabBooking { try decide(id, "decline", note, .declined) }
+
+    private func decide(_ id: UUID, _ action: String, _ note: String, _ status: LabBooking.Status) throws -> LabBooking {
+        decisions.append((id, action, note))
+        if let reviewError { throw reviewError }
+        let original = pending.first { $0.id == id }!
+        return LabBooking(id: id, labID: original.labID, labName: original.labName, start: original.start,
+                          end: original.end, status: status, decidedBy: "Priya Nair", decisionNote: note)
     }
 
     func cancelBooking(id: UUID) async throws -> LabBooking {
@@ -219,6 +238,96 @@ struct BookingStoreTests {
                                                     with: #""checkedInAt":null"#)
         #expect(try JSONDecoder.campusOS.decode(LabBooking.self, from: Data(checkedIn.utf8)).checkedInAt != nil)
         #expect(try JSONDecoder.campusOS.decode(LabBooking.self, from: Data(notYet.utf8)).checkedInAt == nil)
+    }
+
+    // MARK: Faculty approval
+
+    @Test func requestToApprovalLabComesBackPendingAndIsUpcoming() async throws {
+        service.createdStatus = .pending
+        let store = makeStore()
+
+        let booking = try await store.reserve(lab: openLab, start: hoursFromNow(2), purpose: "  Solder the board ")
+
+        #expect(booking.status == .pending)
+        #expect(service.createCalls.first?.purpose == "Solder the board")
+        #expect(store.upcoming.map(\.status) == [.pending])
+    }
+
+    @Test func declinedAndExpiredRequestsAreListedSeparately() async {
+        let declined = LabBooking(id: UUID(), labID: openLab.id, labName: openLab.name, start: hoursFromNow(3),
+                                  end: hoursFromNow(4), status: .declined, decidedBy: "Priya Nair",
+                                  decisionNote: "Lab closed for maintenance")
+        let expired = LabBooking(id: UUID(), labID: openLab.id, labName: openLab.name, start: hoursFromNow(-0.5),
+                                 end: hoursFromNow(0.5), status: .expired)
+        let past = LabBooking(id: UUID(), labID: openLab.id, labName: openLab.name, start: hoursFromNow(-3),
+                              end: hoursFromNow(-2), status: .declined)
+        service.storedBookings = [booking(hours: 5), declined, expired, past]
+        let store = makeStore()
+        await store.load()
+
+        #expect(store.upcoming.count == 1)
+        #expect(store.notApproved.map(\.id) == [expired.id, declined.id])
+    }
+
+    @Test func facultyApproveAndDeclineLeaveTheQueue() async throws {
+        let first = LabBooking(id: UUID(), labID: openLab.id, labName: openLab.name, start: hoursFromNow(2),
+                               end: hoursFromNow(3), status: .pending, student: "Alice Rao")
+        let second = LabBooking(id: UUID(), labID: openLab.id, labName: openLab.name, start: hoursFromNow(4),
+                                end: hoursFromNow(5), status: .pending, student: "Bob")
+        service.pending = [first, second]
+        let store = makeStore()
+        await store.loadReviews()
+        #expect(store.pendingReviews.map(\.id) == [first.id, second.id])
+
+        try await store.approve(first, note: "Bring safety glasses")
+        try await store.decline(second, note: "Lab closed")
+
+        #expect(service.decisions.map(\.action) == ["approve", "decline"])
+        #expect(service.decisions.map(\.note) == ["Bring safety glasses", "Lab closed"])
+        #expect(store.pendingReviews.isEmpty)
+        #expect(store.reviewingID == nil)
+    }
+
+    @Test func refusedApprovalKeepsRequestInQueue() async {
+        let request = LabBooking(id: UUID(), labID: openLab.id, labName: openLab.name, start: hoursFromNow(2),
+                                 end: hoursFromNow(3), status: .pending)
+        service.pending = [request]
+        service.reviewError = APIError.invalid("You can't approve your own request.")
+        let store = makeStore()
+        await store.loadReviews()
+
+        await #expect(throws: APIError.invalid("You can't approve your own request.")) {
+            try await store.approve(request)
+        }
+        #expect(store.pendingReviews.count == 1)
+    }
+
+    @Test func approvalFieldsDecodeAndOlderServersStillWork() throws {
+        let current = """
+        {"id":"d808ae4a-b8e6-405b-9231-1ce929912a92","labID":"LAB001","labName":"Robotics Lab",
+         "start":"2026-10-25T10:00:00+05:30","end":"2026-10-25T11:00:00+05:30","status":"pending",
+         "purpose":"Build the robot chassis","createdAt":"2026-10-24T09:00:00+05:30","checkedInAt":null,
+         "student":"Alice Rao","username":"alice","decidedBy":null,"decidedAt":null,"decisionNote":""}
+        """
+        let older = """
+        {"id":"d808ae4a-b8e6-405b-9231-1ce929912a92","labID":"LAB001","labName":"Robotics Lab",
+         "start":"2026-10-25T10:00:00+05:30","end":"2026-10-25T11:00:00+05:30","status":"active"}
+        """
+        let decoded = try JSONDecoder.campusOS.decode(LabBooking.self, from: Data(current.utf8))
+        #expect((decoded.status, decoded.purpose, decoded.student) == (.pending, "Build the robot chassis", "Alice Rao"))
+        #expect(try JSONDecoder.campusOS.decode(LabBooking.self, from: Data(older.utf8)).purpose == nil)
+        let unknown = current.replacingOccurrences(of: #""status":"pending""#, with: #""status":"on_hold""#)
+        #expect(try JSONDecoder.campusOS.decode(LabBooking.self, from: Data(unknown.utf8)).status == .other)
+    }
+
+    @Test func labDecodesRequiresApproval() throws {
+        let json = """
+        {"id":"LAB001","name":"Robotics Lab","location":"Block A","symbol":"cpu","capacity":30,"equipment":[],
+         "isOpenForBooking":true,"requiresApproval":true,"requiredCertifications":[]}
+        """
+        #expect(try JSONDecoder.campusOS.decode(Lab.self, from: Data(json.utf8)).requiresApproval)
+        let older = json.replacingOccurrences(of: #""requiresApproval":true,"#, with: "")
+        #expect(try JSONDecoder.campusOS.decode(Lab.self, from: Data(older.utf8)).requiresApproval == false)
     }
 
     @Test func failedCancelLeavesBookingActive() async {

@@ -19,6 +19,10 @@ struct LabDetailView: View {
                 Label("Capacity: \(lab.capacity)", systemImage: "person.3")
                 StatusBadge(text: lab.isOpenForBooking ? "Open for bookings" : "Currently closed",
                             color: lab.isOpenForBooking ? .green : .red)
+                if lab.requiresApproval {
+                    Label("Faculty approve student bookings for this lab", systemImage: "person.badge.shield.checkmark")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
                 if !lab.requiredCertifications.isEmpty {
                     Divider()
                     requirements

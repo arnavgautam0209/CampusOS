@@ -6,11 +6,15 @@ struct LabBookingView: View {
     @EnvironmentObject private var auth: AuthManager
     @State private var selectedDate = Date().addingTimeInterval(3600)
     @State private var duration = 60
+    @State private var purpose = ""
     @State private var isSubmitting = false
     @State private var showingSignIn = false
     @State private var alertText = ""
     @State private var showingAlert = false
-    @State private var didSucceed = false
+    @State private var alertTitle = ""
+
+    /// Faculty book directly; students' bookings for approval labs become requests.
+    private var needsApproval: Bool { lab.requiresApproval && auth.currentUser?.role.isStaff != true }
 
     var body: some View {
         Form {
@@ -23,6 +27,9 @@ struct LabBookingView: View {
                     Text("1 hour").tag(60)
                     Text("2 hours").tag(120)
                 }
+                TextField(needsApproval ? "What will you work on? (shown to faculty)" : "Purpose (optional)",
+                          text: $purpose, axis: .vertical)
+                    .lineLimit(1...3)
             }
             if auth.isSignedIn {
                 Section {
@@ -31,13 +38,19 @@ struct LabBookingView: View {
                     } label: {
                         HStack {
                             Spacer()
-                            if isSubmitting { ProgressView() } else { Text("Confirm Reservation") }
+                            if isSubmitting {
+                                ProgressView()
+                            } else {
+                                Text(needsApproval ? "Send Request" : "Confirm Reservation")
+                            }
                             Spacer()
                         }
                     }
                     .disabled(isSubmitting)
                 } footer: {
-                    Text("The CampusOS server checks this time against every student's bookings.")
+                    Text(needsApproval
+                         ? "Faculty approve bookings for this lab. The time is held for you while they decide."
+                         : "The CampusOS server checks this time against every student's bookings.")
                 }
             } else {
                 Section {
@@ -52,7 +65,7 @@ struct LabBookingView: View {
         .sheet(isPresented: $showingSignIn) {
             NavigationStack { SignInView(showsCancel: true) }
         }
-        .alert(didSucceed ? "Reservation Confirmed" : "Booking Failed",
+        .alert(alertTitle,
                isPresented: $showingAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -64,12 +77,18 @@ struct LabBookingView: View {
         isSubmitting = true
         defer { isSubmitting = false }
         do {
-            try await bookingStore.reserve(lab: lab, start: selectedDate, durationMinutes: duration)
-            alertText = "Booking saved. Open the Bookings tab to view it."
-            didSucceed = true
+            let booking = try await bookingStore.reserve(lab: lab, start: selectedDate, durationMinutes: duration,
+                                                         purpose: purpose)
+            if booking.status == .pending {
+                alertTitle = "Request Sent"
+                alertText = "A faculty member will review it. The time is held for you; check the Bookings tab for the decision."
+            } else {
+                alertTitle = "Reservation Confirmed"
+                alertText = "Booking saved. Open the Bookings tab to view it."
+            }
         } catch {
+            alertTitle = "Booking Failed"
             alertText = error.localizedDescription
-            didSucceed = false
         }
         showingAlert = true
     }

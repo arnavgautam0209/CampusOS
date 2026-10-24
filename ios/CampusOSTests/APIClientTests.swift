@@ -123,7 +123,8 @@ struct NetworkTests {
         let service = APIBookingService(api: makeClient(token: "abc"))
         let start = ISO8601DateFormatter().date(from: "2026-10-24T17:00:00Z")!
 
-        _ = try await service.createBooking(labID: "LAB001", start: start, durationMinutes: 90)
+        _ = try await service.createBooking(labID: "LAB001", start: start, durationMinutes: 90,
+                                            purpose: "Robot arm")
 
         let request = try #require(StubURLProtocol.requests.first)
         #expect(request.httpMethod == "POST")
@@ -132,6 +133,21 @@ struct NetworkTests {
         #expect(body["labID"] as? String == "LAB001")
         #expect(body["start"] as? String == "2026-10-24T17:00:00Z")
         #expect(body["durationMinutes"] as? Int == 90)
+        #expect(body["purpose"] as? String == "Robot arm")
+    }
+
+    @Test func approveAndDeclinePostTheNote() async throws {
+        let id = UUID()
+        let service = APIBookingService(api: makeClient(token: "abc"))
+        StubURLProtocol.reset(.init(status: 200, json: bookingJSON))
+        _ = try await service.approve(id: id, note: "Bring goggles")
+        StubURLProtocol.reset(.init(status: 200, json: bookingJSON))
+        _ = try await service.decline(id: id, note: "Lab closed")
+
+        let request = try #require(StubURLProtocol.requests.first)
+        #expect(request.url?.absoluteString.hasSuffix("/bookings/\(id.uuidString.lowercased())/decline/") == true)
+        let body = try #require(JSONSerialization.jsonObject(with: StubURLProtocol.bodies[0]) as? [String: Any])
+        #expect(body["note"] as? String == "Lab closed")
     }
 
     @Test func cancelUsesLowercaseUUIDPath() async throws {

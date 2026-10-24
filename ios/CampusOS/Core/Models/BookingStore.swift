@@ -3,7 +3,20 @@ import Combine
 
 struct LabBooking: Identifiable, Codable, Equatable {
     enum Status: String, Codable {
-        case active, cancelled
+        /// Confirmed (approved, or the lab doesn't need approval).
+        case active
+        /// Waiting for faculty approval; the slot is held.
+        case pending
+        case declined
+        case cancelled
+        /// Not approved before its start time.
+        case expired
+        case other
+
+        init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Status(rawValue: raw) ?? .other
+        }
     }
 
     let id: UUID
@@ -14,6 +27,14 @@ struct LabBooking: Identifiable, Codable, Equatable {
     let status: Status
     /// When the student tapped their card at the lab door (actual session start).
     var checkedInAt: Date? = nil
+    /// What the student plans to do; shown to faculty reviewing the request.
+    var purpose: String? = nil
+    /// Who made the booking (shown to faculty in the review queue).
+    var student: String? = nil
+    var username: String? = nil
+    /// Faculty decision on a request.
+    var decidedBy: String? = nil
+    var decisionNote: String? = nil
 
     /// The server opens check-in this long before the start (bookings/services.py CHECK_IN_EARLY).
     static let checkInOpensBefore: TimeInterval = 10 * 60
@@ -42,12 +63,17 @@ enum BookingFailure: Error, LocalizedError {
     }
 }
 
-/// The signed-in user's lab bookings. The Django API is the source of truth:
-/// it checks overlaps against every student's bookings, not just this device's.
+/// The signed-in user's lab bookings and requests, plus (for faculty) the
+/// approval queue. The Django API is the source of truth: it checks overlaps
+/// against every student's bookings and decides whether approval is needed.
 @MainActor
 final class BookingStore: ObservableObject {
     @Published private(set) var bookings: [LabBooking] = []
     @Published private(set) var loadState: LoadState = .idle
+    /// Faculty: requests waiting for approval.
+    @Published private(set) var pendingReviews: [LabBooking] = []
+    @Published private(set) var reviewState: LoadState = .idle
+    @Published private(set) var reviewingID: UUID?
 
     private let service: BookingService
     private let now: () -> Date
@@ -57,11 +83,19 @@ final class BookingStore: ObservableObject {
         self.now = now
     }
 
-    /// Active bookings that haven't finished, soonest first.
+    /// Confirmed bookings and pending requests that haven't finished, soonest first.
     var upcoming: [LabBooking] {
         let current = now()
         return bookings
-            .filter { $0.status == .active && $0.end > current }
+            .filter { ($0.status == .active || $0.status == .pending) && $0.end > current }
+            .sorted { $0.start < $1.start }
+    }
+
+    /// Requests faculty declined (or that expired) for times that haven't passed, so the student sees why.
+    var notApproved: [LabBooking] {
+        let current = now()
+        return bookings
+            .filter { ($0.status == .declined || $0.status == .expired) && $0.end > current }
             .sorted { $0.start < $1.start }
     }
 
@@ -76,7 +110,7 @@ final class BookingStore: ObservableObject {
     }
 
     /// Re-fetches without showing a loading state, for live updates while the
-    /// Bookings screen is open (e.g. after a check-in tap at the lab door).
+    /// Bookings screen is open (e.g. after a check-in tap or a faculty decision).
     func refresh() async {
         do {
             bookings = try await service.fetchBookings()
@@ -90,23 +124,57 @@ final class BookingStore: ObservableObject {
     func reset() {
         bookings = []
         loadState = .idle
+        pendingReviews = []
+        reviewState = .idle
     }
 
-    func reserve(lab: Lab, start: Date, durationMinutes: Int = 60) async throws {
+    /// Returns the server's booking: `.pending` when the lab needs faculty approval.
+    @discardableResult
+    func reserve(lab: Lab, start: Date, durationMinutes: Int = 60, purpose: String = "") async throws -> LabBooking {
         // Quick local checks for instant feedback; the server re-checks everything.
         guard lab.isOpenForBooking else { throw BookingFailure.closed }
         guard durationMinutes > 0 else { throw BookingFailure.invalidDuration }
         guard start > now() else { throw BookingFailure.past }
 
-        let booking = try await service.createBooking(labID: lab.id, start: start,
-                                                      durationMinutes: durationMinutes)
+        let booking = try await service.createBooking(labID: lab.id, start: start, durationMinutes: durationMinutes,
+                                                      purpose: purpose.trimmingCharacters(in: .whitespacesAndNewlines))
         bookings.append(booking)
+        return booking
     }
 
+    /// Cancels a confirmed booking or withdraws a pending request.
     func cancel(_ booking: LabBooking) async throws {
         let updated = try await service.cancelBooking(id: booking.id)
         if let index = bookings.firstIndex(where: { $0.id == updated.id }) {
             bookings[index] = updated
         }
+    }
+
+    // MARK: Faculty review
+
+    func loadReviews() async {
+        reviewState = .loading
+        do {
+            pendingReviews = try await service.fetchPendingReviews()
+            reviewState = .loaded
+        } catch {
+            reviewState = .failed(error.localizedDescription)
+        }
+    }
+
+    /// The server refuses self-approval and re-checks SkillPass before confirming.
+    func approve(_ booking: LabBooking, note: String = "") async throws {
+        try await review(booking) { try await self.service.approve(id: booking.id, note: note) }
+    }
+
+    func decline(_ booking: LabBooking, note: String) async throws {
+        try await review(booking) { try await self.service.decline(id: booking.id, note: note) }
+    }
+
+    private func review(_ booking: LabBooking, _ action: () async throws -> LabBooking) async throws {
+        reviewingID = booking.id
+        defer { reviewingID = nil }
+        _ = try await action()
+        pendingReviews.removeAll { $0.id == booking.id }
     }
 }

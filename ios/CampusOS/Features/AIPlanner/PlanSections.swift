@@ -141,6 +141,7 @@ private struct RecommendationSection: View {
     @EnvironmentObject private var skillPass: SkillPassStore
     @EnvironmentObject private var bookings: BookingStore
     @EnvironmentObject private var planner: PlannerStore
+    @EnvironmentObject private var auth: AuthManager
     @State private var slotToBook: PlanSlot?
     @State private var bookingSlot: PlanSlot?
     @State private var alertTitle = ""
@@ -177,12 +178,12 @@ private struct RecommendationSection: View {
             }
         }
         .confirmationDialog(
-            "Reserve \(recommendation.lab.name)?",
+            "\(needsApproval ? "Request" : "Reserve") \(recommendation.lab.name)?",
             isPresented: Binding(get: { slotToBook != nil }, set: { if !$0 { slotToBook = nil } }),
             titleVisibility: .visible,
             presenting: slotToBook
         ) { slot in
-            Button("Reserve \(slotText(slot))") { Task { await book(slot) } }
+            Button("\(needsApproval ? "Request" : "Reserve") \(slotText(slot))") { Task { await book(slot) } }
         }
         .alert(alertTitle, isPresented: Binding(get: { alertMessage != nil }, set: { if !$0 { alertMessage = nil } })) {
             Button("OK", role: .cancel) {}
@@ -243,17 +244,28 @@ private struct RecommendationSection: View {
         return "\(day), \(start)–\(end)"
     }
 
+    private var needsApproval: Bool {
+        recommendation.lab.requiresApproval && auth.currentUser?.role.isStaff != true
+    }
+
     private func book(_ slot: PlanSlot) async {
         bookingSlot = slot
         defer { bookingSlot = nil }
         do {
-            try await bookings.reserve(lab: recommendation.lab, start: slot.start, durationMinutes: slot.minutes)
+            let booking = try await bookings.reserve(lab: recommendation.lab, start: slot.start,
+                                                     durationMinutes: slot.minutes)
             planner.markBooked(slot)
-            alertTitle = "Reservation Confirmed"
-            alertMessage = "\(recommendation.lab.name), \(slotText(slot)). It's in your Bookings tab."
+            if booking.status == .pending {
+                alertTitle = "Request Sent"
+                alertMessage = "\(recommendation.lab.name), \(slotText(slot)). Faculty will review it; the time is held for you."
+            } else {
+                alertTitle = "Reservation Confirmed"
+                alertMessage = "\(recommendation.lab.name), \(slotText(slot)). It's in your Bookings tab."
+            }
         } catch {
             alertTitle = "Booking Failed"
             alertMessage = error.localizedDescription
         }
     }
+
 }
