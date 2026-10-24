@@ -113,6 +113,39 @@ The demo seed creates `READER-LAB001` for the Robotics Lab door; issue its key w
 `manage.py device_key READER-LAB001`. A granted tap is a record and a signal only: this prototype must not
 drive real locks or equipment power.
 
+## SafeLab sensor nodes (DHT22 + MQ-2)
+
+A sensor node is a device registered to a **lab** (seeded: `SENSOR-LAB002`, Electronics Lab). Every 10-30 seconds:
+
+```
+POST http://<MAC_WIFI_IP>:8000/api/v1/telemetry/
+Content-Type: application/json
+Authorization: Device <SENSOR_KEY>          (issue with: manage.py device_key SENSOR-LAB002)
+
+{"temperature_c": 24.6, "humidity_pct": 47.0, "gas_raw": 540}
+```
+
+- `temperature_c` (-40 to 85) and `humidity_pct` (0 to 100) come from the DHT22; `gas_raw` is the MQ-2's **raw
+  ESP32 ADC value (0-4095)**, not a calibrated concentration.
+- If a read fails (DHT22 returns NaN), **omit that field or send `null`**; never send `nan`. At least one field is required.
+- Don't send a time; the server timestamps readings.
+
+| HTTP | `status` | Meaning |
+|---|---|---|
+| 201 | `recorded` | Stored. `level` is `normal`, `warning` or `danger`; `alerts` lists what's out of range; `message` is OLED-ready |
+| 400 | `error` | Bad JSON, value out of range, sensor not assigned to a lab |
+| 401 | `error` | Missing or wrong key |
+
+Demo thresholds (server side, uncalibrated): temperature warning ≥ 32 °C or ≤ 10 °C, danger ≥ 40 °C; humidity warning
+≥ 80 % or ≤ 15 %; gas raw warning ≥ 1500, danger ≥ 2500.
+
+**Safety:** the server's `level` is advisory. The node must sound its **own local buzzer/LED** from its own thresholds,
+even when Wi-Fi or the server is down. These hobby sensors are not certified life-safety devices; the lab's real fire
+and gas alarms remain the protection. Faculty acknowledge alerts in the app (SafeLab).
+
+No hardware yet? `manage.py simulate_reading SENSOR-LAB002 --temp 24 --humidity 45 --gas 600` records a reading the
+app labels **Simulated**.
+
 ## Setting up a demo (backend side)
 
 On the Mac running Django (`backend/`):

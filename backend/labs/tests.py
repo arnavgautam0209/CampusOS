@@ -11,6 +11,8 @@ from rest_framework.test import APIClient
 from attendance.models import AttendanceRecord, CampusCard, Classroom
 from bookings.models import Booking
 from devices.models import Device
+from inventory.models import EquipmentLoan
+from safelab.models import SensorReading
 
 from .models import Lab
 
@@ -70,11 +72,15 @@ class WalkthroughSeedTests(TestCase):
         checked_in = Booking.objects.get(user__username="demo_ui_student", lab_id="LAB001")
         self.assertIsNotNone(checked_in.checked_in_at)
         self.assertEqual(checked_in.checked_in_device_id, "READER-DEMO-LAB")
+        self.assertEqual(SensorReading.objects.filter(device_id="SENSOR-DEMO").count(), 7)
+        self.assertTrue(EquipmentLoan.objects.filter(user__username="demo_ui_student").exists())
 
         call_command("seed_walkthrough", "--clean", stdout=StringIO())
         self.assertFalse(get_user_model().objects.filter(username__startswith="demo_ui_").exists())
         self.assertFalse(Classroom.objects.filter(pk="DEMO-ROOM").exists())
-        self.assertFalse(Device.objects.filter(pk__in=["READER-DEMO", "READER-DEMO-LAB"]).exists())
+        self.assertFalse(Device.objects.filter(pk__in=["READER-DEMO", "READER-DEMO-LAB", "SENSOR-DEMO"]).exists())
+        self.assertFalse(SensorReading.objects.exists())
+        self.assertFalse(EquipmentLoan.objects.exists())
         self.assertTrue(Device.objects.filter(pk="READER-LAB001").exists())  # real readers kept
         self.assertTrue(Lab.objects.exists())  # real catalogue kept
 

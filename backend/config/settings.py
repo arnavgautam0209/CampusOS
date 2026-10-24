@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "devices",
     "planner",
     "inventory",
+    "safelab",
 ]
 
 MIDDLEWARE = [

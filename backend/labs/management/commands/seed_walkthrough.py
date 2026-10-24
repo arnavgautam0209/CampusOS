@@ -21,12 +21,19 @@ from rest_framework.test import APIClient
 from attendance.models import AttendanceSession, CampusCard, Classroom
 from bookings.services import create_booking
 from devices.models import Device
+from inventory.services import checkout
+from safelab.models import SensorReading
+from safelab.services import record as record_reading
 from skillpass.models import UserCertification
 
 PREFIX = "demo_ui_"
 ROOM_ID, ROOM_NAME = "DEMO-ROOM", "Demo Lecture Room"
 READER_ID = "READER-DEMO"
 LAB_READER_ID = "READER-DEMO-LAB"
+# Simulated SafeLab sensor (normal readings only, so no alerts) on its own demo device.
+SENSOR_ID, SENSOR_LAB = "SENSOR-DEMO", "LAB004"
+SENSOR_READINGS = [(23.8, 44.0, 510), (24.1, 45.0, 530), (24.6, 46.0, 560), (25.0, 46.0, 610),
+                   (25.3, 47.0, 650), (25.1, 47.0, 620), (24.9, 46.0, 590)]
 CHECK_IN_LAB = "LAB001"
 SESSION_TITLE = "CS201 Embedded Systems · Lecture 5"
 # (username, first, last, staff, card UID)
@@ -108,13 +115,23 @@ class Command(BaseCommand):
         else:
             client.credentials(HTTP_AUTHORIZATION=f"Device {door.issue_key()}")
             client.post("/api/v1/devices/scan/", {"uid": "D1D1D1D1", "labId": CHECK_IN_LAB}, format="json")
+        # AssetX: two Arduino boards on loan; SafeLab: a short history of simulated readings.
+        try:
+            checkout(student, "EQ008", quantity=2, days=3)
+        except APIException:
+            self.stdout.write("Not enough Arduino boards in stock, so the demo skips the loan.")
+        sensor = Device.objects.create(id=SENSOR_ID, name="Demo lab sensor node", lab_id=SENSOR_LAB)
+        for temperature, humidity, gas in SENSOR_READINGS:
+            record_reading(sensor, {"temperature_c": temperature, "humidity_pct": humidity, "gas_raw": gas},
+                           source=SensorReading.Source.SIMULATED)
+
         self.stdout.write(self.style.SUCCESS(
             f"Walkthrough demo data ready: {len(PEOPLE)} demo users, {ROOM_NAME}, {len(TAPS)} reader taps."))
 
     @transaction.atomic
     def clean(self, quiet=False):
         AttendanceSession.objects.filter(classroom_id=ROOM_ID).delete()
-        Device.objects.filter(pk__in=[READER_ID, LAB_READER_ID]).delete()  # also deletes their scan logs
+        Device.objects.filter(pk__in=[READER_ID, LAB_READER_ID, SENSOR_ID]).delete()  # with their scans/readings
         Classroom.objects.filter(pk=ROOM_ID).delete()
         deleted, _ = get_user_model().objects.filter(username__startswith=PREFIX).delete()
         if not quiet:

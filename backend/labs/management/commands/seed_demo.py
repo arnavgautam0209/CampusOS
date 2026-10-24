@@ -79,7 +79,9 @@ DEMO_CLASSROOMS = [("ROOM-101", "Lecture Room 101, Block A"), ("ECE", "ECE Class
 DEMO_DEVICES = [("READER-ROOM-101", "Room 101 card reader", "ROOM-101"),
                 ("READER-ECE", "ECE classroom reader (AttendX ESP32-S3)", "ECE")]
 # Lab door readers check students in to their booking.
-DEMO_LAB_READERS = [("READER-LAB001", "Robotics Lab door reader", "LAB001")]
+DEMO_LAB_READERS = [("READER-LAB001", "Robotics Lab door reader", "LAB001"),
+                    # SafeLab sensor node (ESP32 + DHT22 + MQ-2) posting to /api/v1/telemetry/.
+                    ("SENSOR-LAB002", "Electronics Lab sensor node", "LAB002")]
 
 DEMO_USERNAME = "demo_student"
 
