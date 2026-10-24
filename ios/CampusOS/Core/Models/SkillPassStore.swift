@@ -9,6 +9,10 @@ final class SkillPassStore: ObservableObject {
     @Published private(set) var records: [CertificationRecord] = []
     @Published private(set) var loadState: LoadState = .idle
     @Published private(set) var requestingID: String?
+    /// Faculty review queue: requests waiting for approval.
+    @Published private(set) var pendingReviews: [CertificationRecord] = []
+    @Published private(set) var reviewState: LoadState = .idle
+    @Published private(set) var reviewingID: Int?
 
     private let service: SkillPassService
     /// Whether the last successful load included the student's records.
@@ -36,7 +40,36 @@ final class SkillPassStore: ObservableObject {
         await load(signedIn: signedIn)
     }
 
+    func loadReviews() async {
+        reviewState = .loading
+        do {
+            pendingReviews = try await service.fetchPendingReviews()
+            reviewState = .loaded
+        } catch {
+            reviewState = .failed(error.localizedDescription)
+        }
+    }
+
+    /// The server records who approved and sets the expiry; self-approval is refused there.
+    func approve(_ record: CertificationRecord) async throws {
+        try await review(record) { try await self.service.approve(recordID: record.id) }
+    }
+
+    func decline(_ record: CertificationRecord) async throws {
+        try await review(record) { try await self.service.decline(recordID: record.id) }
+    }
+
+    private func review(_ record: CertificationRecord,
+                        _ action: () async throws -> CertificationRecord) async throws {
+        reviewingID = record.id
+        defer { reviewingID = nil }
+        _ = try await action()
+        pendingReviews.removeAll { $0.id == record.id }
+    }
+
     func reset() {
+        pendingReviews = []
+        reviewState = .idle
         records = []
         loadedSignedIn = nil
         if loadState != .loading { loadState = .idle }

@@ -23,6 +23,9 @@ struct CertificationRecord: Identifiable, Codable, Equatable {
     let approvedBy: String?
     let approvedAt: Date?
     let expiresAt: Date?
+    /// Who the record belongs to; shown to faculty reviewing requests.
+    var username: String? = nil
+    var studentName: String? = nil
 }
 
 /// Where a student stands for one certification, as shown in the app.

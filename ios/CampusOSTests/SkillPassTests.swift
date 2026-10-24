@@ -6,8 +6,12 @@ final class FakeSkillPassService: SkillPassService {
     var catalog: [Certification] = []
     var records: [CertificationRecord] = []
     var requestResult: Result<CertificationRecord, Error>?
+    var pending: [CertificationRecord] = []
+    var reviewError: Error?
     private(set) var recordFetches = 0
     private(set) var requestedIDs: [String] = []
+    private(set) var approvedIDs: [Int] = []
+    private(set) var declinedIDs: [Int] = []
 
     func fetchCatalog() async throws -> [Certification] { catalog }
 
@@ -19,6 +23,20 @@ final class FakeSkillPassService: SkillPassService {
     func requestCertification(id: String) async throws -> CertificationRecord {
         requestedIDs.append(id)
         return try requestResult!.get()
+    }
+
+    func fetchPendingReviews() async throws -> [CertificationRecord] { pending }
+
+    func approve(recordID: Int) async throws -> CertificationRecord {
+        approvedIDs.append(recordID)
+        if let reviewError { throw reviewError }
+        return pending.first { $0.id == recordID }!
+    }
+
+    func decline(recordID: Int) async throws -> CertificationRecord {
+        declinedIDs.append(recordID)
+        if let reviewError { throw reviewError }
+        return pending.first { $0.id == recordID }!
     }
 }
 
@@ -148,6 +166,73 @@ struct SkillPassStoreTests {
     }
 }
 
+@MainActor
+@Suite("SkillPass review queue")
+struct SkillPassReviewTests {
+    private let service = FakeSkillPassService()
+
+    init() {
+        service.pending = [record(electronics, .pending, id: 11), record(soldering, .pending, id: 12)]
+    }
+
+    @Test func loadsPendingRequests() async {
+        let store = SkillPassStore(service: service)
+        await store.loadReviews()
+        #expect(store.pendingReviews.map(\.id) == [11, 12])
+        #expect(store.reviewState == .loaded)
+    }
+
+    @Test func approveAndDeclineRemoveFromQueue() async throws {
+        let store = SkillPassStore(service: service)
+        await store.loadReviews()
+
+        try await store.approve(store.pendingReviews[0])
+        try await store.decline(store.pendingReviews[0])
+
+        #expect(service.approvedIDs == [11])
+        #expect(service.declinedIDs == [12])
+        #expect(store.pendingReviews.isEmpty)
+        #expect(store.reviewingID == nil)
+    }
+
+    @Test func refusedApprovalKeepsRequestAndSurfacesReason() async {
+        service.reviewError = APIError.invalid("You can't approve your own certification.")
+        let store = SkillPassStore(service: service)
+        await store.loadReviews()
+
+        await #expect(throws: APIError.invalid("You can't approve your own certification.")) {
+            try await store.approve(store.pendingReviews[0])
+        }
+        #expect(store.pendingReviews.count == 2)
+        #expect(store.reviewingID == nil)
+    }
+
+    @Test func studentsGetAnErrorNotAQueue() async {
+        final class Forbidden: SkillPassService {
+            func fetchCatalog() async throws -> [Certification] { [] }
+            func fetchMyRecords() async throws -> [CertificationRecord] { [] }
+            func requestCertification(id: String) async throws -> CertificationRecord { throw APIError.badResponse }
+            func fetchPendingReviews() async throws -> [CertificationRecord] {
+                throw APIError.invalid("You do not have permission to perform this action.")
+            }
+            func approve(recordID: Int) async throws -> CertificationRecord { throw APIError.badResponse }
+            func decline(recordID: Int) async throws -> CertificationRecord { throw APIError.badResponse }
+        }
+        let store = SkillPassStore(service: Forbidden())
+        await store.loadReviews()
+        #expect(store.pendingReviews.isEmpty)
+        #expect(store.reviewState.errorMessage != nil)
+    }
+
+    @Test func resetClearsQueue() async {
+        let store = SkillPassStore(service: service)
+        await store.loadReviews()
+        store.reset()
+        #expect(store.pendingReviews.isEmpty)
+        #expect(store.reviewState == .idle)
+    }
+}
+
 @Suite("SkillPass decoding")
 struct SkillPassDecodingTests {
     @Test func decodesServerCertificationRecord() throws {
@@ -159,10 +244,29 @@ struct SkillPassDecodingTests {
          "approvedBy":"faculty","approvedAt":"2026-10-24T00:10:01.5+05:30","expiresAt":"2027-10-24T00:10:01.5+05:30"}
         """
         let decoded = try JSONDecoder.campusOS.decode(CertificationRecord.self, from: Data(json.utf8))
+        #expect(decoded.username == "student")
+        #expect(decoded.studentName == nil)  // older server: no studentName
         #expect(decoded.certification.validityDays == 365)
         #expect(decoded.approvedBy == "faculty")
         #expect(decoded.expiresAt != nil)
         #expect(CertificationStanding(record: decoded).isCertified)
+    }
+
+    @Test func decodesReviewRecordWithStudentName() throws {
+        let json = """
+        {"id":7,"username":"ECE001","studentName":"Asha Verma","certification":{"id":"CERT-SOLDER",
+         "name":"Soldering Station Training","description":"","validityDays":180},"status":"pending",
+         "isValid":false,"requestedAt":"2026-10-24T00:09:24+05:30","approvedBy":null,"approvedAt":null,"expiresAt":null}
+        """
+        let decoded = try JSONDecoder.campusOS.decode(CertificationRecord.self, from: Data(json.utf8))
+        #expect((decoded.username, decoded.studentName) == ("ECE001", "Asha Verma"))
+    }
+
+    @Test func profileDecodesUsernameWhenPresent() throws {
+        let current = #"{"id":"7","username":"demo_faculty","name":"Demo Faculty","email":"","role":"faculty"}"#
+        let older = #"{"id":"7","name":"Demo Faculty","email":"","role":"faculty"}"#
+        #expect(try JSONDecoder.campusOS.decode(CampusUser.self, from: Data(current.utf8)).username == "demo_faculty")
+        #expect(try JSONDecoder.campusOS.decode(CampusUser.self, from: Data(older.utf8)).username == nil)
     }
 
     @Test func decodesPendingRecordWithNulls() throws {

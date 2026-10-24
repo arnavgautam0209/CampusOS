@@ -26,6 +26,16 @@ struct PreviewSkillPassService: SkillPassService {
     func requestCertification(id: String) async throws -> CertificationRecord {
         throw APIError.notFound("Not available in previews.")
     }
+
+    func fetchPendingReviews() async throws -> [CertificationRecord] { [] }
+
+    func approve(recordID: Int) async throws -> CertificationRecord {
+        throw APIError.notFound("Not available in previews.")
+    }
+
+    func decline(recordID: Int) async throws -> CertificationRecord {
+        throw APIError.notFound("Not available in previews.")
+    }
 }
 
 struct PreviewAttendanceService: AttendanceService {

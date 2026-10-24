@@ -9,4 +9,6 @@ struct CampusUser: Identifiable, Codable {
     let name: String
     let email: String
     let role: CampusRole
+    /// Login name (e.g. a roll number). Older servers don't send it.
+    var username: String? = nil
 }

@@ -9,10 +9,13 @@ struct SkillPassView: View {
         content
             .navigationTitle("SkillPass")
             .task(id: auth.isSignedIn) { await skillPass.loadIfNeeded(signedIn: auth.isSignedIn) }
+            .task(id: isStaff) { if isStaff { await skillPass.loadReviews() } }
             .sheet(isPresented: $showingSignIn) {
                 NavigationStack { SignInView(showsCancel: true) }
             }
     }
+
+    private var isStaff: Bool { auth.currentUser?.role.isStaff == true }
 
     @ViewBuilder
     private var content: some View {
@@ -41,6 +44,9 @@ struct SkillPassView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(.orange)
             }
+            if isStaff {
+                ReviewQueueSection()
+            }
             if !auth.isSignedIn {
                 Section {
                     VStack(alignment: .leading, spacing: 10) {
@@ -64,6 +70,9 @@ struct SkillPassView: View {
                 Text("Restricted labs need these certifications before you can book them. Only faculty can approve a certification; CampusOS AI never grants one.")
             }
         }
-        .refreshable { await skillPass.load(signedIn: auth.isSignedIn) }
+        .refreshable {
+            await skillPass.load(signedIn: auth.isSignedIn)
+            if isStaff { await skillPass.loadReviews() }
+        }
     }
 }

@@ -43,6 +43,7 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - Sign-in with Django token auth; token stored in the Keychain; editable server address
 - LabOS (**live backend data**): lab catalogue and equipment from `/api/v1/labs/`; reservations (30 min / 1 h / 2 h) and cancellation through `/api/v1/bookings/`, with loading, error and retry states. Conflicts are checked by the server across all users
 - Lab check-in: tapping a card on a lab's door reader checks the student in to their booking; Bookings shows "Tap your card at the lab door" when check-in opens and "Checked in at 10:02 · in use until 11:00" afterwards (refreshes every 5 s while open)
+- SkillPass faculty review: staff see **Requests to Review** on the SkillPass screen and approve or decline with one tap (self-approval is refused by the server)
 - SkillPass (**live backend data**): your certifications with status and expiry, available training with a **Request Training** / **Request Renewal** button; lab details list required certifications with your standing, and equipment shows its own requirements
 - ProxyGuard (**live backend data**): faculty open and close sessions, and see who's present, a live feed of reader taps (new taps highlighted) and reader status. Students see their own attendance. Both refresh every 3 s while open
 - AssetX and SafeLab still show **sample data** (labelled as such); SpacePulse is a placeholder
@@ -56,7 +57,7 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - Lab check-in: lab door readers validate the student's booking and SkillPass certifications, answer granted/denied, and record the actual session start
 - Attendance: ESP32 readers POST card taps to `/api/v1/devices/scan/` with a device key. Attendance is marked only while faculty have a session open in that room, with duplicate protection and a log of every scan
 
-**Not yet built:** real roles, an in-app faculty approval screen (use Django admin), sensor telemetry, the full ProxyGuard verification flow, inventory quantities.
+**Not yet built:** real roles, sensor telemetry, the full ProxyGuard verification flow, inventory quantities.
 
 ## Ground rules
 - The backend is the source of truth. Anything shown from local demo data is labelled as demo data.
