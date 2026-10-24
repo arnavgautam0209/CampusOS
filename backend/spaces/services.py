@@ -5,8 +5,8 @@ availability; the app only shows what these functions allow.
 
 from datetime import datetime, time, timedelta
 
-from django.db import transaction
-from django.db.models import Count, Q
+from django.db import connection, transaction
+from django.db.models import Count, F, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
@@ -14,7 +14,10 @@ from rest_framework.exceptions import APIException, NotFound, PermissionDenied, 
 from attendance.models import AttendanceSession, Classroom
 from bookings.services import MAX_DURATION_MINUTES, MIN_DURATION_MINUTES
 
+from . import capacity
 from .models import RoomBooking
+
+MAX_GROUP_SIZE = 500
 
 CHECK_IN_OPENS = timedelta(minutes=10)   # before the start
 NO_SHOW_AFTER = timedelta(minutes=15)    # after the start, an un-checked-in booking expires
@@ -27,15 +30,15 @@ class RoomConflict(APIException):
     default_code = "room_conflict"
 
 
-def release_no_shows(now=None):
-    """Expire bookings nobody checked in to, so the room becomes free again."""
-    now = now or timezone.now()
-    return RoomBooking.objects.filter(status=RoomBooking.Status.ACTIVE, checked_in_at__isnull=True,
-                                      start__lt=now - NO_SHOW_AFTER).update(status=RoomBooking.Status.EXPIRED)
+def parse_mode(raw, default=RoomBooking.Mode.EXCLUSIVE):
+    if raw in (None, ""):
+        return default
+    if raw not in RoomBooking.Mode.values:
+        raise ValidationError({"mode": "Use shared or exclusive."})
+    return raw
 
 
-def book_room(user, room_id, start, duration_minutes, attendees=1, purpose="", now=None):
-    now = now or timezone.now()
+def check_request(start, duration_minutes, group_size, now):
     if not (MIN_DURATION_MINUTES <= duration_minutes <= MAX_DURATION_MINUTES):
         raise ValidationError({"durationMinutes": f"Must be between {MIN_DURATION_MINUTES} and "
                                                   f"{MAX_DURATION_MINUTES} minutes."})
@@ -43,29 +46,86 @@ def book_room(user, room_id, start, duration_minutes, attendees=1, purpose="", n
         raise ValidationError({"start": "Choose a future start time."})
     if start > now + timedelta(days=30):
         raise ValidationError({"start": "Rooms can be booked up to 30 days ahead."})
-    if attendees < 1:
-        raise ValidationError({"attendees": "At least 1 person."})
+    if not (1 <= group_size <= MAX_GROUP_SIZE):
+        raise ValidationError({"attendees": f"Group size must be between 1 and {MAX_GROUP_SIZE}."})
+
+
+def lock_room(room_id):
+    """
+    Serialise bookings for one room. PostgreSQL locks the row (SELECT … FOR UPDATE). SQLite ignores
+    FOR UPDATE, so a no-op UPDATE takes SQLite's database write lock first: a second booking waits
+    until this transaction commits instead of reading the same free seats.
+    """
+    if connection.vendor == "sqlite":
+        Classroom.objects.filter(pk=room_id).update(capacity=F("capacity"))
+    return Classroom.objects.select_for_update().filter(pk=room_id).first()
+
+
+def release_no_shows(now=None):
+    """Expire bookings nobody checked in to, so the room becomes free again."""
+    now = now or timezone.now()
+    return RoomBooking.objects.filter(status=RoomBooking.Status.ACTIVE, checked_in_at__isnull=True,
+                                      start__lt=now - NO_SHOW_AFTER).update(status=RoomBooking.Status.EXPIRED)
+
+
+def book_room(user, room_id, start, duration_minutes, attendees=1, purpose="", now=None,
+              mode=RoomBooking.Mode.EXCLUSIVE):
+    """
+    Exclusive: the whole room, nothing else may overlap. Shared: the group's seats must be free for the
+    whole range (busiest moment counted). Either way a timetabled class blocks the room.
+    """
+    now = now or timezone.now()
+    check_request(start, duration_minutes, attendees, now)
     end = start + timedelta(minutes=duration_minutes)
     release_no_shows(now)
 
     with transaction.atomic():
-        # Locking the room row serialises bookings for the same room (PostgreSQL).
-        room = Classroom.objects.select_for_update().filter(pk=room_id).first()
+        room = lock_room(room_id)
         if room is None:
             raise NotFound("Room not found.")
         if not room.is_bookable and not user.is_staff:
             raise PermissionDenied(f"{room.name} is timetabled; ask faculty to book it.")
         if attendees > room.capacity:
             raise ValidationError({"attendees": f"{room.name} seats {room.capacity}."})
-        clash = RoomBooking.objects.filter(room=room, status=RoomBooking.Status.ACTIVE,
-                                           start__lt=end, end__gt=start).exists()
-        if clash:
+        seats = capacity.seats_for([room], start, end)[room.id]
+        if seats.lecture:
+            raise RoomConflict(f"{room.name} has a class then ({seats.blocked_reason.split(': ', 1)[1]}).")
+        if mode == RoomBooking.Mode.EXCLUSIVE and seats.bookings:
             raise RoomConflict()
+        if mode == RoomBooking.Mode.SHARED:
+            if seats.exclusive:
+                raise RoomConflict(f"{room.name} is booked for exclusive use for part of that time.")
+            if attendees > seats.free:
+                raise RoomConflict(f"Only {seats.free} of {room.capacity} seats in {room.name} are free for the "
+                                   f"whole time; your group needs {attendees}.")
         return RoomBooking.objects.create(room=room, user=user, start=start, end=end, attendees=attendees,
-                                          purpose=(purpose or "").strip()[:120])
+                                          mode=mode, purpose=(purpose or "").strip()[:120])
 
 
-def cancel(booking, user):
+def recommend(user, start, duration_minutes, group_size, mode=RoomBooking.Mode.SHARED, kind="classroom", now=None):
+    """
+    Rooms a group can book over the range, best fit first (fewest seats left empty), plus the rooms
+    that don't work and why. Uses real free seats at that time, not total capacity.
+    """
+    now = now or timezone.now()
+    check_request(start, duration_minutes, group_size, now)
+    end = start + timedelta(minutes=duration_minutes)
+    release_no_shows(now)
+    rooms = Classroom.objects.order_by("id")
+    if kind != "all":
+        rooms = rooms.filter(kind=kind)
+    if not user.is_staff:
+        rooms = rooms.filter(is_bookable=True)
+    rooms = list(rooms)
+    seats = capacity.seats_for(rooms, start, end)
+    eligible = capacity.rank([s for s in seats.values() if capacity.fits(s, group_size, mode)], group_size, mode)
+    unavailable = [s for s in seats.values() if not capacity.fits(s, group_size, mode)]
+    return {"start": start, "end": end, "group_size": group_size, "mode": mode, "eligible": eligible,
+            "unavailable": sorted(unavailable, key=lambda s: s.room.id), "timetable": capacity.active_timetable()}
+
+
+def cancel(booking, user, note=""):
+    """Cancelling releases the group's seats at once (only active bookings take seats)."""
     if booking.user_id != user.pk and not user.is_staff:
         raise PermissionDenied("Only the person who booked can cancel.")
     if booking.status != RoomBooking.Status.ACTIVE:
@@ -74,7 +134,8 @@ def cancel(booking, user):
         raise ValidationError({"status": "This booking has already ended."})
     booking.status = RoomBooking.Status.CANCELLED
     booking.cancelled_at = timezone.now()
-    booking.save(update_fields=["status", "cancelled_at"])
+    booking.note = note[:240]
+    booking.save(update_fields=["status", "cancelled_at", "note"])
     return booking
 
 

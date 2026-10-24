@@ -1,0 +1,20 @@
+day,start,end,room_id,activity
+Monday,09:00,10:00,ECE-101,Digital Electronics
+Monday,10:00,11:00,ECE-102,Circuit Analysis
+Monday,11:00,12:00,ECE-101,Microcontrollers
+Monday,11:00,12:00,IT-201,Python Programming
+Monday,11:00,12:00,CSE-301,AI Workshop
+Monday,12:00,13:00,CSE-301,Data Structures
+Tuesday,09:00,10:00,IT-201,Web Development
+Tuesday,10:00,11:00,ECE-101,Embedded Systems
+Tuesday,11:00,12:00,CSE-301,Operating Systems
+Tuesday,14:00,15:00,ECE-102,Analog Communication
+Wednesday,09:00,10:00,CSE-301,Computer Networks
+Wednesday,11:00,12:00,SEM-01,Faculty Seminar
+Wednesday,14:00,16:00,IT-201,Software Engineering
+Thursday,10:00,11:00,CSE-301,Database Management
+Thursday,11:00,12:00,ECE-101,VLSI Design
+Thursday,15:00,16:00,IT-201,Cloud Computing
+Friday,09:00,10:00,ECE-102,Control Systems
+Friday,11:00,12:00,IT-201,Deep Learning
+Friday,14:00,15:00,HALL-01,Department Workshop
