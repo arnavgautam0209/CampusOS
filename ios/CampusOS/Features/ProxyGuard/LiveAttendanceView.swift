@@ -80,6 +80,16 @@ struct LiveAttendanceView: View {
                 LiveStatusRow(lastUpdated: store.lastUpdated, errorMessage: store.loadState.errorMessage)
             }
 
+            Section {
+                NavigationLink {
+                    AttendanceSessionsView()
+                } label: {
+                    Label("Attendance Reports", systemImage: "doc.text.magnifyingglass")
+                }
+            } footer: {
+                Text("Present and absent students for any session, with a PDF to share.")
+            }
+
             Section("Open Sessions") {
                 if live.openSessions.isEmpty {
                     Text("No attendance session is open, so readers won't mark anyone present.")
@@ -94,6 +104,11 @@ struct LiveAttendanceView: View {
                     }
                     ForEach(session.records) { attendee in
                         AttendeeRow(attendee: attendee)
+                    }
+                    NavigationLink {
+                        SessionReportView(sessionId: session.id, title: session.title)
+                    } label: {
+                        Label("Provisional Report", systemImage: "doc.text.magnifyingglass")
                     }
                     Button(role: .destructive) {
                         sessionToClose = session

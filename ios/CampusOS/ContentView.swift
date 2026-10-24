@@ -5,6 +5,7 @@ struct ContentView: View {
     @EnvironmentObject private var bookings: BookingStore
     @EnvironmentObject private var skillPass: SkillPassStore
     @EnvironmentObject private var attendance: AttendanceStore
+    @EnvironmentObject private var attendanceReports: AttendanceReportStore
     @EnvironmentObject private var planner: PlannerStore
     @EnvironmentObject private var inventory: InventoryStore
     @EnvironmentObject private var safeLab: SafeLabStore
@@ -30,6 +31,7 @@ struct ContentView: View {
                 bookings.reset()
                 skillPass.reset()
                 attendance.reset()
+                attendanceReports.reset()
                 planner.reset()
                 inventory.reset()
                 safeLab.reset()

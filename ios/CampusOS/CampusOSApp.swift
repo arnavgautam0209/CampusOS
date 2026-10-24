@@ -7,6 +7,7 @@ struct CampusOSApp: App {
     @StateObject private var bookings: BookingStore
     @StateObject private var skillPass: SkillPassStore
     @StateObject private var attendance: AttendanceStore
+    @StateObject private var attendanceReports: AttendanceReportStore
     @StateObject private var planner: PlannerStore
     @StateObject private var inventory: InventoryStore
     @StateObject private var safeLab: SafeLabStore
@@ -19,6 +20,7 @@ struct CampusOSApp: App {
         _bookings = StateObject(wrappedValue: BookingStore(service: APIBookingService(api: api)))
         _skillPass = StateObject(wrappedValue: SkillPassStore(service: APISkillPassService(api: api)))
         _attendance = StateObject(wrappedValue: AttendanceStore(service: APIAttendanceService(api: api)))
+        _attendanceReports = StateObject(wrappedValue: AttendanceReportStore(service: APIAttendanceService(api: api)))
         _planner = StateObject(wrappedValue: PlannerStore(service: APIPlannerService(api: api)))
         _inventory = StateObject(wrappedValue: InventoryStore(service: APIInventoryService(api: api)))
         _safeLab = StateObject(wrappedValue: SafeLabStore(service: APISafeLabService(api: api)))
@@ -33,6 +35,7 @@ struct CampusOSApp: App {
                 .environmentObject(bookings)
                 .environmentObject(skillPass)
                 .environmentObject(attendance)
+                .environmentObject(attendanceReports)
                 .environmentObject(planner)
                 .environmentObject(inventory)
                 .environmentObject(safeLab)

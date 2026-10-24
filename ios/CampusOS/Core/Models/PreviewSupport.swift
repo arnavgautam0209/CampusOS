@@ -58,6 +58,18 @@ struct PreviewAttendanceService: AttendanceService {
     }
 }
 
+extension PreviewAttendanceService: AttendanceReportService {
+    func fetchSessions() async throws -> [AttendanceSessionSummary] { [] }
+
+    func fetchReport(sessionId: Int) async throws -> SessionReport {
+        throw APIError.notFound("Not available in previews.")
+    }
+
+    func downloadReportPDF(sessionId: Int) async throws -> (data: Data, filename: String?) {
+        throw APIError.notFound("Not available in previews.")
+    }
+}
+
 struct PreviewPlannerService: PlannerService {
     func plan(prompt: String) async throws -> ProjectPlan {
         throw APIError.notFound("Not available in previews.")
@@ -112,6 +124,7 @@ extension View {
             .environmentObject(BookingStore(service: PreviewBookingService()))
             .environmentObject(SkillPassStore(service: PreviewSkillPassService()))
             .environmentObject(AttendanceStore(service: PreviewAttendanceService()))
+            .environmentObject(AttendanceReportStore(service: PreviewAttendanceService()))
             .environmentObject(PlannerStore(service: PreviewPlannerService()))
             .environmentObject(InventoryStore(service: PreviewInventoryService()))
             .environmentObject(SafeLabStore(service: PreviewSafeLabService()))

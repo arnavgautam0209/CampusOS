@@ -38,14 +38,33 @@ final class APIClient {
         try await send(path, method: "POST", body: nil, authenticated: authenticated)
     }
 
+    /// A file such as a PDF report: its bytes and the filename the server suggests (Content-Disposition).
+    func download(_ path: String, accept: String, authenticated: Bool,
+                  timeout: TimeInterval = 30) async throws -> (data: Data, filename: String?) {
+        let (data, response) = try await perform(path, method: "GET", body: nil, authenticated: authenticated,
+                                                 timeout: timeout, accept: accept)
+        return (data, response.suggestedFilename)
+    }
+
     static let defaultTimeout: TimeInterval = 15
 
     private func send<T: Decodable>(_ path: String, method: String, body: Data?, authenticated: Bool,
                                     timeout: TimeInterval = APIClient.defaultTimeout) async throws -> T {
+        let (data, _) = try await perform(path, method: method, body: body, authenticated: authenticated,
+                                          timeout: timeout, accept: "application/json")
+        do {
+            return try JSONDecoder.campusOS.decode(T.self, from: data)
+        } catch {
+            throw APIError.badResponse
+        }
+    }
+
+    private func perform(_ path: String, method: String, body: Data?, authenticated: Bool,
+                         timeout: TimeInterval, accept: String) async throws -> (Data, HTTPURLResponse) {
         guard let url = URL(string: path, relativeTo: baseURL()) else { throw APIError.badResponse }
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -72,11 +91,7 @@ final class APIClient {
             }
             throw error
         }
-        do {
-            return try JSONDecoder.campusOS.decode(T.self, from: data)
-        } catch {
-            throw APIError.badResponse
-        }
+        return (data, http)
     }
 }
 

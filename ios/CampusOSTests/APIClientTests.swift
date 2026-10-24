@@ -8,6 +8,8 @@ final class StubURLProtocol: URLProtocol {
         var status = 200
         var json = "{}"
         var error: URLError?
+        var headers: [String: String] = ["Content-Type": "application/json"]
+        var body: Data?
     }
 
     nonisolated(unsafe) static var stub = Stub()
@@ -37,9 +39,9 @@ final class StubURLProtocol: URLProtocol {
             return
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: Self.stub.status,
-                                       httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+                                       httpVersion: nil, headerFields: Self.stub.headers)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(Self.stub.json.utf8))
+        client?.urlProtocol(self, didLoad: Self.stub.body ?? Data(Self.stub.json.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
 
@@ -134,6 +136,33 @@ struct NetworkTests {
         #expect(body["start"] as? String == "2026-10-24T17:00:00Z")
         #expect(body["durationMinutes"] as? Int == 90)
         #expect(body["purpose"] as? String == "Robot arm")
+    }
+
+    @Test func reportPDFDownloadKeepsBytesAndServerFilename() async throws {
+        let pdf = Data("%PDF-1.4 report".utf8)
+        StubURLProtocol.reset(.init(status: 200, headers: [
+            "Content-Type": "application/pdf",
+            "Content-Disposition": #"attachment; filename="AttendX_ECE_Session_14.pdf""#,
+        ], body: pdf))
+        let service = APIAttendanceService(api: makeClient(token: "abc"))
+
+        let (data, filename) = try await service.downloadReportPDF(sessionId: 14)
+
+        #expect(data == pdf)
+        #expect(filename == "AttendX_ECE_Session_14.pdf")
+        let request = try #require(StubURLProtocol.requests.first)
+        #expect(request.url?.absoluteString.hasSuffix("/attendance/sessions/14/report/pdf/") == true)
+        #expect(request.value(forHTTPHeaderField: "Accept") == "application/pdf, application/json")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Token abc")
+    }
+
+    @Test func reportPDFForbiddenSurfacesServerMessage() async {
+        StubURLProtocol.reset(.init(status: 403,
+                                    json: #"{"detail":"You do not have permission to perform this action."}"#))
+        let service = APIAttendanceService(api: makeClient(token: "abc"))
+        await #expect(throws: APIError.invalid("You do not have permission to perform this action.")) {
+            _ = try await service.downloadReportPDF(sessionId: 14)
+        }
     }
 
     @Test func approveAndDeclinePostTheNote() async throws {

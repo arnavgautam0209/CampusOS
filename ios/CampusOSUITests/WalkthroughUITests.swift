@@ -125,7 +125,7 @@ final class WalkthroughUITests: XCTestCase {
         tab("Home")
         app.swipeUp()
         openCard("ProxyGuard")
-        waitFor("Live Scan Feed", timeout: 15)
+        waitFor("Open Sessions", timeout: 15)
         shot("proxyguard-faculty")
         app.swipeUp()
         shot("proxyguard-faculty-feed")
@@ -139,6 +139,27 @@ final class WalkthroughUITests: XCTestCase {
         shot("proxyguard-close-confirm")
         // Leave the session open: dismiss the dialog without confirming.
         app.swipeDown()
+
+        // Session attendance report (provisional, since the demo session is still open)
+        app.swipeDown()
+        app.swipeDown()
+        tapButton("Attendance Reports")
+        waitFor("CS201 Embedded Systems", timeout: 15)
+        shot("report-sessions")
+        tapButton("CS201 Embedded Systems")
+        waitFor("Attendance Summary", timeout: 15)
+        shot("report-summary")
+        tapButton("View Present Students")
+        waitFor("PRESENT")
+        shot("report-present")
+        back()
+        tapButton("View Absent Students")
+        waitFor("ABSENT")
+        shot("report-absent")
+        back()
+        tapButton("Download / Share PDF")
+        sleep(3)
+        shot("report-pdf")
     }
 
     // MARK: Helpers
