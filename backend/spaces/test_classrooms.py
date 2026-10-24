@@ -258,6 +258,11 @@ class UploadTests(ClassroomTestCase):
         self.assertEqual(self.find(self.monday, "11:00", group=8)["recommended"]["id"], "ECE-101")
         self.assertTrue(TimetableEvent.objects.filter(action="uploaded", timetable_id=body["id"]).exists())
 
+    def test_active_timetable_preview_has_no_changes(self):
+        a = Timetable.objects.get()
+        self.assertEqual(self.api(self.prof).get(f"{TIMETABLES}{a.id}/preview/").json(),
+                         {"againstVersion": None, "againstName": None, "changes": []})
+
     def test_multipart_file_upload(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
         upload = SimpleUploadedFile("Timetable_B_Updated.csv", read("Timetable_B_Updated.csv").encode())
@@ -352,6 +357,7 @@ class ActivationTests(ClassroomTestCase):
         response = self.activate(b)
         self.assertEqual(response.status_code, 409)
         self.assertIn("1 upcoming booking(s) clash", response.json()["detail"])
+        self.assertEqual(response.json()["conflicts"], 1)
         stored = RoomBooking.objects.get(pk=booking["id"])
         self.assertEqual((stored.status, stored.room_id), ("active", "ECE-101"))
         b.refresh_from_db()

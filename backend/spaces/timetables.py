@@ -52,6 +52,10 @@ class ActivationBlocked(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "timetable_conflicts"
 
+    def __init__(self, detail, conflicts=0):
+        super().__init__(detail)
+        self.detail = {"detail": detail, "conflicts": conflicts}   # keep the count a number
+
 
 def _parse_day(raw):
     text = raw.strip().lower()
@@ -177,6 +181,8 @@ def _slots(timetable):
 def preview(timetable):
     """What changes if `timetable` replaces the active one: rooms that become occupied or free."""
     active = capacity.active_timetable()
+    if timetable.status == Timetable.Status.ACTIVE:
+        return {"against": None, "changes": []}   # it is the active one: nothing would change
     old = _slots(active if active and active.pk != timetable.pk else None)
     new = _slots(timetable)
     changes = []
@@ -243,9 +249,8 @@ def activate(timetable, user, now=None, system=False):
         raise ValidationError({"status": "This timetable is already active."})
     clashes = conflicts(timetable, now)
     if clashes:
-        raise ActivationBlocked({
-            "detail": f"{len(clashes)} upcoming booking(s) clash with this timetable. Move or cancel them first.",
-            "conflicts": len(clashes)})
+        raise ActivationBlocked(
+            f"{len(clashes)} upcoming booking(s) clash with this timetable. Move or cancel them first.", len(clashes))
     previous = capacity.active_timetable()
     if previous:
         previous.status = Timetable.Status.ARCHIVED
@@ -256,7 +261,7 @@ def activate(timetable, user, now=None, system=False):
     try:
         timetable.save(update_fields=["status", "activated_at", "activated_by"])
     except IntegrityError:
-        raise ActivationBlocked({"detail": "Another timetable was activated at the same moment. Try again."})
+        raise ActivationBlocked("Another timetable was activated at the same moment. Try again.")
     TimetableEvent.objects.create(
         timetable=timetable, action=TimetableEvent.Action.ACTIVATED, actor=timetable.activated_by,
         detail=f"Replaced v{previous.version} {previous.name}" if previous else "First active timetable")
