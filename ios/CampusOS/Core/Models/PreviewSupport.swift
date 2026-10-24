@@ -115,6 +115,25 @@ struct PreviewSpacesService: SpacesService {
     func checkIn(id: UUID) async throws -> RoomBooking { throw APIError.notFound("Not available in previews.") }
 }
 
+struct PreviewSpacePulseService: SpacePulseService {
+    private var unavailable: APIError { .notFound("Not available in previews.") }
+    func findRooms(_ search: RoomSearch) async throws -> RoomSearchResult { throw unavailable }
+    func book(roomId: String, start: Date, minutes: Int, groupSize: Int, mode: BookingMode,
+              purpose: String) async throws -> RoomBooking { throw unavailable }
+    func fetchActiveTimetable() async throws -> Timetable? { nil }
+    func fetchTimetables() async throws -> [Timetable] { [] }
+    func fetchTimetable(id: Int) async throws -> Timetable { throw unavailable }
+    func uploadTimetable(name: String, filename: String, csv: String) async throws -> Timetable { throw unavailable }
+    func fetchPreview(id: Int) async throws -> TimetablePreview { throw unavailable }
+    func fetchConflicts(id: Int) async throws -> [TimetableConflict] { [] }
+    func resolve(timetableId: Int, bookingId: UUID, action: ConflictAction, roomId: String?) async throws -> RoomBooking {
+        throw unavailable
+    }
+    func activate(id: Int) async throws -> Timetable { throw unavailable }
+    func fetchHistory() async throws -> [TimetableEvent] { [] }
+    func fetchAllBookings() async throws -> [RoomBooking] { [] }
+}
+
 extension View {
     @MainActor
     func previewEnvironment() -> some View {
@@ -129,6 +148,8 @@ extension View {
             .environmentObject(InventoryStore(service: PreviewInventoryService()))
             .environmentObject(SafeLabStore(service: PreviewSafeLabService()))
             .environmentObject(SpacesStore(service: PreviewSpacesService()))
+            .environmentObject(RoomFinderStore(service: PreviewSpacePulseService()))
+            .environmentObject(TimetableStore(service: PreviewSpacePulseService()))
     }
 }
 #endif

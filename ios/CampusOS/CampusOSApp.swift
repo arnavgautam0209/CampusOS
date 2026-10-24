@@ -12,6 +12,8 @@ struct CampusOSApp: App {
     @StateObject private var inventory: InventoryStore
     @StateObject private var safeLab: SafeLabStore
     @StateObject private var spaces: SpacesStore
+    @StateObject private var roomFinder: RoomFinderStore
+    @StateObject private var timetables: TimetableStore
 
     init() {
         let api = APIClient()
@@ -25,6 +27,8 @@ struct CampusOSApp: App {
         _inventory = StateObject(wrappedValue: InventoryStore(service: APIInventoryService(api: api)))
         _safeLab = StateObject(wrappedValue: SafeLabStore(service: APISafeLabService(api: api)))
         _spaces = StateObject(wrappedValue: SpacesStore(service: APISpacesService(api: api)))
+        _roomFinder = StateObject(wrappedValue: RoomFinderStore(service: APISpacesService(api: api)))
+        _timetables = StateObject(wrappedValue: TimetableStore(service: APISpacesService(api: api)))
     }
 
     var body: some Scene {
@@ -40,6 +44,8 @@ struct CampusOSApp: App {
                 .environmentObject(inventory)
                 .environmentObject(safeLab)
                 .environmentObject(spaces)
+                .environmentObject(roomFinder)
+                .environmentObject(timetables)
         }
     }
 }

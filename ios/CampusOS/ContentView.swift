@@ -10,6 +10,8 @@ struct ContentView: View {
     @EnvironmentObject private var inventory: InventoryStore
     @EnvironmentObject private var safeLab: SafeLabStore
     @EnvironmentObject private var spaces: SpacesStore
+    @EnvironmentObject private var roomFinder: RoomFinderStore
+    @EnvironmentObject private var timetables: TimetableStore
 
     var body: some View {
         TabView {
@@ -36,6 +38,8 @@ struct ContentView: View {
                 inventory.reset()
                 safeLab.reset()
                 spaces.reset()
+                roomFinder.reset()
+                timetables.reset()
             }
         }
     }

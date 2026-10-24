@@ -78,10 +78,21 @@ final class WalkthroughUITests: XCTestCase {
 
         // SpacePulse
         openCard("SpacePulse")
-        waitFor("Study Room A1", timeout: 15)
+        waitFor("Find Best Room", timeout: 15)
         shot("spacepulse")
+        tapButton("Find Best Room")
+        waitFor("Group size", timeout: 10)
+        shot("spacepulse-find")
+        app.swipeUp()
+        tapButton("Find Best Room")
+        waitFor("Timetable v", timeout: 15)
+        shot("spacepulse-recommendation")
+        app.swipeUp()
+        shot("spacepulse-other-rooms")
+        back()
         app.swipeUp()
         shot("spacepulse-rooms")
+        scrollTo("Study Room A2")
         tapButton("Study Room A2")
         waitFor("Start Time", timeout: 10)
         shot("spacepulse-book")
@@ -123,6 +134,17 @@ final class WalkthroughUITests: XCTestCase {
         signIn("demo_ui_faculty", password)
         waitFor("Meera Iyer", timeout: 15)
         tab("Home")
+        // SpacePulse timetables (faculty)
+        openCard("SpacePulse")
+        tapButton("Manage Timetables")
+        waitFor("Active Timetable", timeout: 15)
+        shot("timetables")
+        tapButton("Timetable A")
+        waitFor("rows passed validation", timeout: 15)
+        shot("timetable-review")
+        back()
+        back()
+        back()
         app.swipeUp()
         openCard("ProxyGuard")
         waitFor("Open Sessions", timeout: 15)
@@ -160,6 +182,15 @@ final class WalkthroughUITests: XCTestCase {
         tapButton("Download / Share PDF")
         sleep(3)
         shot("report-pdf")
+    }
+
+    /// Scrolls until the button is in the upper part of the screen, clear of the tab bar.
+    private func scrollTo(_ text: String) {
+        for _ in 0..<8 {
+            let element = app.buttons.matching(predicate(text)).firstMatch
+            if element.exists, element.isHittable, element.frame.maxY < app.frame.height * 0.75 { return }
+            app.swipeUp()
+        }
     }
 
     // MARK: Helpers

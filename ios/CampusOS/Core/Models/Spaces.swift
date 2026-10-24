@@ -59,6 +59,14 @@ struct CampusRoom: Codable, Identifiable, Equatable {
     let inClassNow: Bool
     let freeNow: Bool
     let busy: [BusySlot]
+    /// Classes from the active timetable that day; the whole room is taken. Empty from older servers.
+    var lectures: [Lecture] = []
+
+    struct Lecture: Codable, Equatable {
+        let start: Date
+        let end: Date
+        let activity: String
+    }
 
     /// Start times (every 30 min) where `minutes` fits between `dayStart` and `dayEnd`
     /// without overlapping a busy slot and not in the past. The server re-checks.
@@ -69,7 +77,8 @@ struct CampusRoom: Codable, Identifiable, Equatable {
         var slot = dayStart
         while slot.addingTimeInterval(length) <= dayEnd {
             let end = slot.addingTimeInterval(length)
-            if slot > now, !busy.contains(where: { $0.start < end && slot < $0.end }) {
+            if slot > now, !busy.contains(where: { $0.start < end && slot < $0.end }),
+               !lectures.contains(where: { $0.start < end && slot < $0.end }) {
                 starts.append(slot)
             }
             slot = slot.addingTimeInterval(step)
@@ -100,6 +109,11 @@ struct RoomBooking: Codable, Identifiable, Equatable {
     let checkedInAt: Date?
     let bookedBy: String
     let username: String
+    /// Shared: the group uses some seats; exclusive: the whole room. Older servers: exclusive.
+    var mode: BookingMode = .exclusive
+    /// Set when faculty moved or cancelled the booking, e.g. for a new timetable.
+    var note: String?
+    var roomCapacity: Int?
 
     /// Server rules (spaces/services.py): check-in opens 10 min before the start and
     /// closes 15 min after it, when an un-checked-in booking is released.
@@ -110,6 +124,56 @@ struct RoomBooking: Codable, Identifiable, Equatable {
         status == .active && checkedInAt == nil
             && now >= start.addingTimeInterval(-Self.checkInOpensBefore)
             && now <= start.addingTimeInterval(Self.noShowAfter)
+    }
+}
+
+enum BookingMode: String, Codable, CaseIterable, Identifiable {
+    case shared, exclusive
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = BookingMode(rawValue: raw) ?? .exclusive
+    }
+
+    var id: String { rawValue }
+    var label: String { self == .shared ? "Shared Study" : "Exclusive" }
+}
+
+extension CampusRoom {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        kind = try c.decode(RoomKind.self, forKey: .kind)
+        capacity = try c.decode(Int.self, forKey: .capacity)
+        location = try c.decode(String.self, forKey: .location)
+        features = try c.decode([String].self, forKey: .features)
+        isBookable = try c.decode(Bool.self, forKey: .isBookable)
+        inClassNow = try c.decode(Bool.self, forKey: .inClassNow)
+        freeNow = try c.decode(Bool.self, forKey: .freeNow)
+        busy = try c.decode([BusySlot].self, forKey: .busy)
+        lectures = try c.decodeIfPresent([Lecture].self, forKey: .lectures) ?? []
+    }
+}
+
+extension RoomBooking {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        roomId = try c.decode(String.self, forKey: .roomId)
+        roomName = try c.decode(String.self, forKey: .roomName)
+        start = try c.decode(Date.self, forKey: .start)
+        end = try c.decode(Date.self, forKey: .end)
+        purpose = try c.decode(String.self, forKey: .purpose)
+        attendees = try c.decode(Int.self, forKey: .attendees)
+        status = try c.decode(Status.self, forKey: .status)
+        checkedInAt = try c.decodeIfPresent(Date.self, forKey: .checkedInAt)
+        bookedBy = try c.decode(String.self, forKey: .bookedBy)
+        username = try c.decode(String.self, forKey: .username)
+        mode = try c.decodeIfPresent(BookingMode.self, forKey: .mode) ?? .exclusive
+        let note = try c.decodeIfPresent(String.self, forKey: .note)
+        self.note = (note?.isEmpty ?? true) ? nil : note
+        roomCapacity = try c.decodeIfPresent(Int.self, forKey: .roomCapacity)
     }
 }
 

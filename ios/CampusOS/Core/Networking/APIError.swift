@@ -36,9 +36,19 @@ enum APIError: LocalizedError, Equatable {
     }
 
     /// DRF errors look like {"detail": "..."} or {"field": ["..."]}; pick the first message.
+    /// File uploads add {"errors": [{"row": 3, "message": "..."}]}: those lines are listed under the detail.
     static func serverMessage(from data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) else { return nil }
-        return firstMessage(in: json)
+        let message = firstMessage(in: json)
+        if let object = json as? [String: Any], let rows = object["errors"] as? [[String: Any]], !rows.isEmpty {
+            let lines = rows.prefix(20).compactMap { row -> String? in
+                guard let text = row["message"] as? String else { return nil }
+                return (row["row"] as? Int).map { "Line \($0): \(text)" } ?? text
+            }
+            let more = rows.count > 20 ? "\n…and \(rows.count - 20) more" : ""
+            return ([message].compactMap { $0 } + lines).joined(separator: "\n") + more
+        }
+        return message
     }
 
     private static func firstMessage(in value: Any) -> String? {

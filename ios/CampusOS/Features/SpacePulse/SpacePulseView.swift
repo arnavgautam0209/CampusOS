@@ -92,6 +92,24 @@ struct SpacePulseView: View {
                 .pickerStyle(.segmented)
             }
 
+            Section {
+                NavigationLink {
+                    FindRoomView()
+                } label: {
+                    Label("Find Best Room", systemImage: "sparkle.magnifyingglass")
+                        .font(.headline)
+                }
+                if isStaff {
+                    NavigationLink {
+                        ManageTimetablesView()
+                    } label: {
+                        Label("Manage Timetables", systemImage: "calendar.badge.clock")
+                    }
+                }
+            } footer: {
+                Text("Tell SpacePulse your group size and time; it suggests the classroom that fits best.")
+            }
+
             if !spaces.upcoming.isEmpty {
                 Section("Your Room Bookings") {
                     ForEach(spaces.upcoming) { booking in
@@ -119,7 +137,7 @@ struct SpacePulseView: View {
             } header: {
                 Text("Rooms · \(day.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))")
             } footer: {
-                Text("Bars show 08:00–20:00; your bookings are purple. Check in from 10 minutes before your start; bookings without a check-in 15 minutes after the start are released for others.")
+                Text("Bars show 08:00–20:00: classes are orange, your bookings purple. Check in from 10 minutes before your start; bookings without a check-in 15 minutes after the start are released for others.")
             }
 
             if isStaff, !spaces.usage.isEmpty {
@@ -187,7 +205,7 @@ private struct RoomRow: View {
                 Spacer(minLength: 4)
                 statusBadge
             }
-            DayTimeline(slots: room.busy, dayStart: dayStart, dayEnd: dayEnd)
+            DayTimeline(slots: room.busy, lectures: room.lectures, dayStart: dayStart, dayEnd: dayEnd)
             if !room.isBookable {
                 Text("Timetabled: faculty book this room.").font(.caption).foregroundStyle(.secondary)
             }
@@ -213,6 +231,7 @@ private struct RoomRow: View {
 /// A 08:00–20:00 bar with booked periods filled in.
 private struct DayTimeline: View {
     let slots: [CampusRoom.BusySlot]
+    var lectures: [CampusRoom.Lecture] = []
     let dayStart: Date
     let dayEnd: Date
 
@@ -221,6 +240,15 @@ private struct DayTimeline: View {
             let total = dayEnd.timeIntervalSince(dayStart)
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.green.opacity(0.15))
+                // Timetabled classes (orange) take the whole room.
+                ForEach(Array(lectures.enumerated()), id: \.offset) { _, lecture in
+                    let start = max(0, lecture.start.timeIntervalSince(dayStart)) / total
+                    let end = min(total, lecture.end.timeIntervalSince(dayStart)) / total
+                    Capsule()
+                        .fill(Color.orange)
+                        .frame(width: max(4, proxy.size.width * (end - start)))
+                        .offset(x: proxy.size.width * start)
+                }
                 ForEach(Array(slots.enumerated()), id: \.offset) { _, slot in
                     let start = max(0, slot.start.timeIntervalSince(dayStart)) / total
                     let end = min(total, slot.end.timeIntervalSince(dayStart)) / total
@@ -233,9 +261,11 @@ private struct DayTimeline: View {
         }
         .frame(height: 8)
         .accessibilityElement()
-        .accessibilityLabel(slots.isEmpty ? "Free all day" : "Booked " + slots.map {
-            "\($0.start.formatted(date: .omitted, time: .shortened)) to \($0.end.formatted(date: .omitted, time: .shortened))"
-        }.joined(separator: ", "))
+        .accessibilityLabel(slots.isEmpty && lectures.isEmpty ? "Free all day" : (lectures.map {
+            "\($0.activity) \($0.start.formatted(date: .omitted, time: .shortened)) to \($0.end.formatted(date: .omitted, time: .shortened))"
+        } + slots.map {
+            "Booked \($0.start.formatted(date: .omitted, time: .shortened)) to \($0.end.formatted(date: .omitted, time: .shortened))"
+        }).joined(separator: ", "))
     }
 }
 
@@ -251,6 +281,14 @@ private struct MyRoomBookingRow: View {
                 Text(booking.roomName).font(.headline)
                 Text("\(booking.start.formatted(date: .abbreviated, time: .shortened))–\(booking.end.formatted(date: .omitted, time: .shortened)) · \(booking.attendees) \(booking.attendees == 1 ? "person" : "people")")
                     .font(.subheadline).foregroundStyle(.secondary)
+                Text(booking.mode == .shared
+                     ? "Shared study · \(booking.attendees)\(booking.roomCapacity.map { " of \($0)" } ?? "") seats"
+                     : "Whole room")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let note = booking.note {
+                    Label(note, systemImage: "arrow.triangle.swap")
+                        .font(.caption).foregroundStyle(.orange)
+                }
                 if !booking.purpose.isEmpty {
                     Text(booking.purpose).font(.caption).foregroundStyle(.secondary)
                 }
