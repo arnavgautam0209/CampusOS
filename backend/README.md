@@ -46,6 +46,10 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | POST | `/api/v1/attendance/sessions/{id}/close/` | staff | Close a session; readers in that room stop marking |
 | POST | `/api/v1/ai/planner/` | token | `{prompt}` returns recommended labs, free slots, SkillPass status, missing items and next steps (rate-limited per user) |
 | POST | `/api/scan/` | device key (or none in local open-scan mode) | AttendX firmware contract `{card_uid, classroom}` for classroom attendance; see firmware/README.md |
+| GET | `/api/v1/inventory/` | public | Equipment with `totalQuantity`, `availableQuantity`, `isLowStock`, `isLoanable`, `underMaintenance` |
+| GET | `/api/v1/inventory/loans/` | token | Your loans (`?scope=all` for staff: everything out or reported) |
+| POST | `/api/v1/inventory/loans/` | token | `{equipmentId, quantity, days}` borrow: 400 lab-only/maintenance/limits, 403 certification, 404 unknown, 409 not enough stock |
+| POST | `/api/v1/inventory/loans/{id}/return/` | token | `{condition: ok|damaged|missing, note}` (borrower or staff) |
 | GET | `/api/v1/certifications/` | public | SkillPass catalogue |
 | GET | `/api/v1/certifications/mine/` | token | Your certification records (`status`, `isValid`, `expiresAt`) |
 | POST | `/api/v1/certifications/{id}/request/` | token | Ask faculty to certify you (creates a pending record) |
@@ -90,6 +94,13 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - **Setup:** set `ANTHROPIC_API_KEY` in your environment or `backend/.env`, never in Git. Without it, or if Claude is unreachable, rate-limited or declines, the planner uses keyword matching and the response says so (`engine: "keywords"` plus a note). Set `CAMPUSOS_PLANNER_ENGINE=keywords` to never call Claude. Requests are limited to `CAMPUSOS_PLANNER_RATE` per user (default 30/hour).
 - **Model:** Claude Opus 5.5 (`claude-opus-5-5`) at low effort, with structured JSON output and server-side refusal fallback. The student's description is sent to Anthropic's API.
 
+## AssetX inventory
+- Equipment has `total_quantity`, `low_stock_threshold` and `is_loanable` (lab-use-only items can't be borrowed); `is_available` off means under maintenance.
+- Available units = total minus units on active loans and units returned damaged/missing but not yet resolved. Checkout locks the item row so two students can't take the last unit.
+- Borrowing up to 10 units for 1-14 days; equipment certifications (SkillPass) must stay valid until the due date.
+- Damaged/missing returns need a note and stay out of stock until staff use the admin action *Mark damaged/missing reports as repaired or replaced*.
+- `seed_demo` sets demo stock (e.g. 25 Arduino boards, 8 oscilloscopes that need Basic Electronics Safety).
+
 ## Layout
 ```
 config/     settings (env-driven), root URLs, /api/v1/ routing
@@ -99,8 +110,9 @@ bookings/   Booking model, booking rules (services.py), API
 skillpass/  certifications, approval workflow, access checks
 attendance/ classrooms, campus cards, attendance sessions and records
 devices/    readers, device-key auth, /devices/scan/, scan log, device_key command
+inventory/  AssetX stock, loans, returns and damage reports
 planner/    AI Mission Planner: Claude extraction with keyword fallback, deterministic plan engine
 ```
 
 ## Not yet built
-Real roles and permissions, server-side sign-out (token revocation), equipment checkout (to enforce equipment certifications), telemetry, course enrolment checks, the full ProxyGuard verification flow, inventory quantities (the planner can't check stock counts yet), PostgreSQL configuration.
+Real roles and permissions, server-side sign-out (token revocation), telemetry, course enrolment checks, the full ProxyGuard verification flow, stock counts in the AI planner (it checks availability, not quantities), PostgreSQL configuration.

@@ -26,11 +26,17 @@ class Equipment(models.Model):
     lab = models.ForeignKey(Lab, on_delete=models.CASCADE, related_name="equipment")
     name = models.CharField(max_length=120)
     category = models.CharField(max_length=60)
-    is_available = models.BooleanField(default=True)
+    is_available = models.BooleanField(default=True, help_text="Untick while the item is under maintenance.")
     required_certifications = models.ManyToManyField(
         "skillpass.Certification", blank=True, related_name="required_for_equipment",
-        help_text="Certifications needed to operate this equipment (shown to students; enforced at checkout later).",
+        help_text="Certifications needed to operate this equipment; enforced when it is borrowed.",
     )
+    # AssetX stock. Units available = total minus units on loan or reported damaged/missing.
+    total_quantity = models.PositiveIntegerField(default=1)
+    low_stock_threshold = models.PositiveIntegerField(
+        default=1, help_text="Show as low stock when this many units or fewer are available.")
+    is_loanable = models.BooleanField(
+        default=False, help_text="Students may borrow it out of the lab (otherwise it's used in the lab only).")
 
     class Meta:
         ordering = ["id"]

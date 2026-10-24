@@ -57,6 +57,16 @@ DEMO_CERTIFICATIONS = [
     ("CERT-3DP", "3D Printer Operation", "Printer setup, materials and fire safety.", 365),
 ]
 LAB_REQUIREMENTS = {"LAB002": ["CERT-ELEC-BASIC"]}
+# AssetX stock: (total units, low-stock threshold, loanable). Not listed: 1 unit, lab use only.
+STOCK = {
+    "EQ001": (20, 4, True),    # ESP32 Kits
+    "EQ003": (6, 1, False),    # Soldering Station
+    "EQ004": (8, 2, True),     # Oscilloscope (needs Basic Electronics Safety)
+    "EQ005": (15, 3, True),    # Multimeter
+    "EQ007": (4, 1, False),    # GPU Workstation
+    "EQ008": (25, 5, True),    # Arduino Uno Boards
+    "EQ009": (40, 8, True),    # DC Gear Motors
+}
 EQUIPMENT_REQUIREMENTS = {
     "EQ002": ["CERT-ROBOT-ARM"],
     "EQ003": ["CERT-SOLDER"],
@@ -100,6 +110,9 @@ class Command(BaseCommand):
                 id=cert_id, defaults={"name": name, "description": description, "validity_days": validity_days})
         for lab_id, cert_ids in LAB_REQUIREMENTS.items():
             Lab.objects.get(pk=lab_id).required_certifications.set(cert_ids)
+        for equipment_id, (total, low, loanable) in STOCK.items():
+            Equipment.objects.filter(pk=equipment_id).update(
+                total_quantity=total, low_stock_threshold=low, is_loanable=loanable)
         for equipment_id, cert_ids in EQUIPMENT_REQUIREMENTS.items():
             Equipment.objects.get(pk=equipment_id).required_certifications.set(cert_ids)
         for classroom_id, name in DEMO_CLASSROOMS:

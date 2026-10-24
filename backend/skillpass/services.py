@@ -17,10 +17,10 @@ class CertificationRequired(APIException):
     status_code = status.HTTP_403_FORBIDDEN
     default_code = "certification_required"
 
-    def __init__(self, missing):
+    def __init__(self, missing, subject="This lab"):
         names = ", ".join(cert.name for cert in missing)
         super().__init__({
-            "detail": f"This lab requires certification: {names}. Ask faculty to approve your training in SkillPass.",
+            "detail": f"{subject} requires certification: {names}. Ask faculty to approve your training in SkillPass.",
             "missingCertifications": [cert.id for cert in missing],
         })
 

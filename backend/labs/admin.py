@@ -18,6 +18,6 @@ class LabAdmin(admin.ModelAdmin):
 
 @admin.register(Equipment)
 class EquipmentAdmin(admin.ModelAdmin):
-    list_display = ["id", "name", "category", "lab", "is_available"]
-    list_filter = ["category", "is_available", "lab"]
+    list_display = ["id", "name", "category", "lab", "total_quantity", "is_loanable", "is_available"]
+    list_filter = ["category", "is_loanable", "is_available", "lab"]
     filter_horizontal = ["required_certifications"]

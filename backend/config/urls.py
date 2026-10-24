@@ -22,6 +22,7 @@ api_v1 = [
     path("", include("devices.urls")),
     path("", include("attendance.urls")),
     path("", include("planner.urls")),
+    path("", include("inventory.urls")),
 ]
 
 urlpatterns = [

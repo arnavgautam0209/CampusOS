@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "attendance",
     "devices",
     "planner",
+    "inventory",
 ]
 
 MIDDLEWARE = [
