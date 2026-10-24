@@ -6,6 +6,7 @@ struct BorrowSheet: View {
 
     @EnvironmentObject private var inventory: InventoryStore
     @EnvironmentObject private var skillPass: SkillPassStore
+    @EnvironmentObject private var auth: AuthManager
     @Environment(\.dismiss) private var dismiss
     @State private var quantity = 1
     @State private var days = 1
@@ -13,6 +14,7 @@ struct BorrowSheet: View {
     @State private var errorMessage: String?
 
     private static let loanLengths = [1, 3, 7, 14]
+    private var isStaff: Bool { auth.currentUser?.role.isStaff == true }
     private var maxQuantity: Int { max(1, min(item.availableQuantity, 10)) }
 
     var body: some View {
@@ -22,12 +24,18 @@ struct BorrowSheet: View {
                 LabeledContent("Lab", value: item.labName)
                 LabeledContent("Available", value: "\(item.availableQuantity) of \(item.totalQuantity)")
             }
-            Section("Loan") {
+            Section {
                 Stepper("Quantity: \(quantity)", value: $quantity, in: 1...maxQuantity)
                 Picker("Return within", selection: $days) {
                     ForEach(Self.loanLengths, id: \.self) { length in
                         Text(length == 1 ? "1 day" : "\(length) days").tag(length)
                     }
+                }
+            } header: {
+                Text("Loan")
+            } footer: {
+                if !isStaff {
+                    Text("This sends a request. An admin approves it before the units are yours; track it in the Requests tab.")
                 }
             }
             if !item.requiredCertifications.isEmpty {
@@ -62,7 +70,7 @@ struct BorrowSheet: View {
                 if isSubmitting {
                     ProgressView()
                 } else {
-                    Button("Borrow") { Task { await submit() } }
+                    Button(isStaff ? "Borrow" : "Request") { Task { await submit() } }
                 }
             }
         }

@@ -14,6 +14,7 @@ struct CampusOSApp: App {
     @StateObject private var spaces: SpacesStore
     @StateObject private var roomFinder: RoomFinderStore
     @StateObject private var timetables: TimetableStore
+    @StateObject private var requests: RequestsStore
 
     init() {
         let api = APIClient()
@@ -29,6 +30,7 @@ struct CampusOSApp: App {
         _spaces = StateObject(wrappedValue: SpacesStore(service: APISpacesService(api: api)))
         _roomFinder = StateObject(wrappedValue: RoomFinderStore(service: APISpacesService(api: api)))
         _timetables = StateObject(wrappedValue: TimetableStore(service: APISpacesService(api: api)))
+        _requests = StateObject(wrappedValue: RequestsStore(service: APIRequestsService(api: api)))
     }
 
     var body: some Scene {
@@ -46,6 +48,7 @@ struct CampusOSApp: App {
                 .environmentObject(spaces)
                 .environmentObject(roomFinder)
                 .environmentObject(timetables)
+                .environmentObject(requests)
         }
     }
 }

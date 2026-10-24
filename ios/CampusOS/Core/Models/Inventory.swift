@@ -21,7 +21,8 @@ struct InventoryItem: Codable, Identifiable, Equatable {
 /// Units of one item borrowed by someone (GET/POST /api/v1/inventory/loans/).
 struct EquipmentLoan: Codable, Identifiable, Equatable {
     enum Status: String, Codable {
-        case active, returned, reported, resolved, other
+        // pending/rejected: a student's request before or after an admin decided.
+        case pending, rejected, active, returned, reported, resolved, other
 
         init(from decoder: Decoder) throws {
             let raw = try decoder.singleValueContainer().decode(String.self)

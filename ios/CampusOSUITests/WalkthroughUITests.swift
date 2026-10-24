@@ -132,7 +132,9 @@ final class WalkthroughUITests: XCTestCase {
         tab("Profile")
         tapButton("Sign Out")
         signIn("demo_ui_faculty", password)
-        waitFor("Meera Iyer", timeout: 15)
+        // Admins land on their request dashboard after signing in.
+        waitFor("Admin Requests", timeout: 15)
+        shot("admin-requests")
         tab("Home")
         // SpacePulse timetables (faculty)
         openCard("SpacePulse")
