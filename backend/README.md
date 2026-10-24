@@ -55,6 +55,10 @@ Roles are temporary: superuser = administrator, staff = faculty, everyone else =
 | GET | `/api/v1/inventory/loans/` | token | Your loans (`?scope=all` for staff: everything out or reported) |
 | POST | `/api/v1/inventory/loans/` | token | `{equipmentId, quantity, days}` borrow: 400 lab-only/maintenance/limits, 403 certification, 404 unknown, 409 not enough stock |
 | POST | `/api/v1/inventory/loans/{id}/return/` | token | `{condition: ok|damaged|missing, note}` (borrower or staff) |
+| GET | `/api/v1/safelab/labs/` | token | Labs with their equipment (asset ID, name, type) for the fault form |
+| GET/POST | `/api/v1/safelab/faults/` | token | Students: own reports / `{labId, equipmentId, category, severity, description}` → `pending` (400 if the equipment isn't in that lab). Faculty: every report (`?status=`) |
+| POST | `/api/v1/safelab/faults/{id}/approve\|reject\|maintenance\|resolve/` | staff | `{note}`; reject needs a reason. Under maintenance marks the equipment unavailable until resolved |
+| GET | `/api/v1/safelab/faults/analytics/` | staff | Faults by equipment type, lab, status, most-reported equipment, last 6 months |
 | POST | `/api/v1/telemetry/` | device key (sensor in a lab) | `{temperature_c, humidity_pct, gas_raw}` from a SafeLab sensor node; see firmware/README.md |
 | GET | `/api/v1/safelab/` | token | Per-lab status (normal/warning/danger/offline), latest reading, last 40 readings, open alerts, thresholds |
 | POST | `/api/v1/safelab/alerts/{id}/acknowledge/` | staff | Acknowledge a safety alert |
@@ -131,7 +135,12 @@ Booking errors: `400` validation (closed lab, past start, duration outside 15–
 - Damaged/missing returns need a note and stay out of stock until staff use the admin action *Mark damaged/missing reports as repaired or replaced*.
 - `seed_demo` sets demo stock (e.g. 25 Arduino boards, 8 oscilloscopes that need Basic Electronics Safety).
 
-## SafeLab
+## SafeLab equipment faults
+- SafeLab handles faults in physical lab equipment only. A report names an existing `labs.Equipment` (its ID is the asset ID) and the lab it's in; the server rejects equipment from another lab or any free-text item. Categories: not working, partially working, physically damaged, unexpected behaviour, other equipment fault; severity low/medium/high/critical; a description is required.
+- Statuses: pending → approved / rejected (reason required) / under maintenance → resolved. Under maintenance sets the item unavailable (AssetX shows it); resolving the last open one makes it available again.
+- `manage.py seed_safelab_demo` (safe to rerun) adds Mac Lab (LAB005) and IoT Lab (LAB006), fictional equipment for every lab (e.g. `MAC-IMAC-01`, `IOT-ESP32-01`, reusing EQ002 Robotic Arm, EQ004 Oscilloscope, EQ006 3D Printer) and 26 fictional historical reports by three fictional accounts, once. Chart values are computed from the database.
+
+## SafeLab sensors (API only)
 - Readings are rated against demo thresholds in `safelab/rules.py` (hobby sensors: not certified limits). Out-of-range kinds open one alert per lab and kind, which escalates but never downgrades, notes when readings return to normal, and stays until faculty acknowledge it.
 - A lab shows `offline` when its sensor hasn't reported for 2 minutes; an un-acknowledged alert's level still outranks that.
 - `simulate_reading <sensor> --temp --humidity --gas` stores readings marked *simulated*, shown as such in the app.
